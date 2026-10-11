@@ -15,12 +15,12 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "30 3 * * 1"
 
 concurrency:
   group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-  schedule:
-    - cron: "30 3 * * 1"
 
 jobs:
   analyze:
@@ -67,7 +67,5 @@ jobs:
       - uses: github/codeql-action/analyze@f3712979fa5f215279b101dd0a2e3bdfb4353324 # v3
         with:
           category: "/language:${{ matrix.language }}"
-          # SARIF upload needs GitHub code scanning, which is free on public repos and not on a
-          # private personal-account repo. This repository is currently private, so upload would
-          # fail the job after a successful analysis. Keep analysing; upload once it is public.
+          # SARIF upload needs GitHub code scanning (free on public repos).
           upload: ${{ github.event.repository.private && 'never' || 'always' }}

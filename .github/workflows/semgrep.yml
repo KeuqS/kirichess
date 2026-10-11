@@ -14,12 +14,12 @@ on:
   pull_request:
   push:
     branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
 
 concurrency:
   group: semgrep-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-  schedule:
-    - cron: "0 6 * * 1"
 
 jobs:
   semgrep:
