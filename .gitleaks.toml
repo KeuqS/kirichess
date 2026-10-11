@@ -28,4 +28,7 @@ regexes = [
   # rule treated it as a live bearer. The page now uses $KIRICHESS_API_TOKEN; this keeps
   # history scans from failing on the old string.
   '''kc_YOUR_TOKEN''',
+  # Starting position after 1.e4 — a FEN, not a key. generic-api-key scores slash-separated
+  # alphanumerics + entropy. Same class as the C-3.md fingerprint in .gitleaksignore.
+  '''rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR''',
 ]

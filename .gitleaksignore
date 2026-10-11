@@ -35,3 +35,6 @@ be11c0b56eafdef96196fd15750ebc110f7cd2f5:docs/ROADMAP.md:kirichess-personal-mail
 # entropy (4.1) and slash-separated alphanumerics, which is what a FEN looks like. Expect this rule
 # to keep finding FENs; they are the one high-entropy string this repo is full of by nature.
 e6c891f470048f8c97628e3171b79744a6411147:docs/audits/C-3.md:generic-api-key:67
+
+# Same FEN quoted in C.md (public import root commit scanned the whole tree as "new").
+40fb30f403c7556453980cb398dc67e6d1487625:docs/audits/C.md:generic-api-key:2613
