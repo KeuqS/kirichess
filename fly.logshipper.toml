@@ -1,0 +1,59 @@
+# Log retention / aggregation (9c.6). Not our own code: this deploys superfly/fly-log-shipper
+# (https://github.com/superfly/fly-log-shipper), a prebuilt Vector image that subscribes to this
+# org's internal Fly log stream (NATS) and forwards every line to Better Stack, so 6d.2's
+# JSON-to-stdout survives past Fly's own log buffer (a few hours) instead of being the only copy of
+# a cheating report's or a disputed game's evidence. Full deploy steps: DEPLOYMENT.md
+# "Log retention / aggregation (9c.6)".
+#
+# The Fly app already exists (`kirichess-log-shipper`, created 2026-08-17). Do not `fly launch`
+# again - that rewrites this file (the 9c.2 staging trap) and would create a second app. Secrets,
+# then `fly deploy --config fly.logshipper.toml --no-public-ips --ha=false`.
+#
+# No [http_service]: Vector only makes outbound connections to Better Stack. Fly's own log-shipper
+# docs tell you to delete the generated service block and deploy with --no-public-ips. The Aug 17
+# attempt already had no public IPs; the Machines stopped because secrets were never set (Vector
+# exits without ACCESS_TOKEN). Machines without a service do not auto-stop.
+#
+# --ha=false is load-bearing. fly deploy's default is two Machines, and without a NATS QUEUE those
+# two would each subscribe to the same stream and duplicate every line in Better Stack.
+app = "kirichess-log-shipper"
+primary_region = "ams"
+
+[build]
+  # I-2-9: pinned by digest, not the moving `:latest` tag - same reasoning as Dockerfile.backend /
+  # Dockerfile.frontend's base-image pins (10c.3), and it matters more here: this image holds
+  # ACCESS_TOKEN, a readonly token scoped to the whole Fly org, and reads every app's log stream.
+  # Unlike those two Dockerfiles, this is a fly.toml `[build] image`, not a Dockerfile FROM line, so
+  # Dependabot's docker ecosystem (.github/dependabot.yml) does not see it and will not open a bump
+  # PR when superfly publishes a new build. Recreating this app (DEPLOYMENT.md § 11.2) means
+  # deliberately refreshing this digest, not inheriting whatever `:latest` resolves to that day -
+  # resolve the new one with the same anonymous-token GET this digest was captured with:
+  #   curl -s "https://ghcr.io/token?service=ghcr.io&scope=repository:superfly/fly-log-shipper:pull"
+  #   curl -s -H "Authorization: Bearer <token>" -H "Accept: application/vnd.docker.distribution.manifest.v2+json" \
+  #     https://ghcr.io/v2/superfly/fly-log-shipper/manifests/latest -D - -o /dev/null | grep -i docker-content-digest
+  # Digest captured 2026-09-05.
+  image = "ghcr.io/superfly/fly-log-shipper@sha256:844d084753fa29f2f45e3fa37711615793816859929727fb4f01a11c62a3c642"
+
+[env]
+  # Every app in the org, unfiltered: at four apps total (api/ui x production/staging) plus this
+  # shipper's own logs, a NATS SUBJECT filter (logs.<app>.<region>.<instance>) buys nothing but a
+  # silent gap the day an app is added and nobody remembers to widen it. Revisit if volume ever
+  # makes narrowing this worth the risk - Better Stack's Live tail can filter by the `fly.app`
+  # field Vector attaches in the meantime.
+  SUBJECT = "logs.>"
+
+# Vector serves /health on 8686. A top-level check does not require a public service; Fly docs
+# recommend it because this image can stop shipping without exiting.
+[checks]
+  [checks.vector]
+    port = 8686
+    type = "http"
+    method = "get"
+    path = "/health"
+    grace_period = "10s"
+    interval = "30s"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

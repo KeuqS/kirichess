@@ -1,0 +1,38 @@
+# Phase 10c.3: waiver list for the image-scan gate in .github/workflows/ci.yml (the e2e job's
+# "Scan backend/frontend image for vulnerabilities" steps). Same shape as
+# .github/scripts/npm-audit-gate.mjs's ALLOWLIST: everything not listed here at HIGH/CRITICAL fails
+# the build, and everything listed here is a decision, not an oversight. Trivy reads the `exp:` date
+# on each line itself and stops honouring the entry once it passes, so an expired waiver goes back to
+# failing the build rather than waiving silently forever.
+#
+# Backend image scanned clean at HIGH/CRITICAL when this file was written (2026-08-18) - nothing to
+# list for it. Everything below is the frontend image.
+#
+# Re-scanned 2026-10-03 with Trivy 0.74.0 (`trivy image --severity CRITICAL,HIGH --ignore-unfixed`,
+# this file not applied). The rebuilt frontend image (next 16.3.8 on
+# node:26-alpine@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80)
+# reports exactly the three CVEs below. An earlier scan of the previous image (next 16.3.3 on
+# node:26-alpine@sha256:aadf416b…) is what surfaced the next advisory that was then bumped.
+#
+# Dropped, because that scan no longer reports them:
+# - The vendored-in-next block (tar/cross-spawn/postcss under next/dist/compiled) was already gone
+#   on 2026-09-04 and is still gone. postcss and sharp in the app tree are clean.
+# - next itself was NOT clean: GHSA-vcvr-r3jv-pc5j, a critical RCE in next/og ImageResponse, on
+#   16.3.3, fixed in 16.3.6. That is an app dependency, so it was bumped to next@16.3.8 instead of
+#   waived.
+# - Bundled-npm CVEs that npm 11.19.1 in the new digest no longer carries: CVE-2026-14257,
+#   CVE-2026-69152, CVE-2026-69192, CVE-2026-73566.
+# - CVE-2026-14456 (OpenSSL QUIC server DoS). The new digest has libssl3/libcrypto3 3.5.8-r0, which
+#   is the fixed package. CVE-2026-45447 was already absent on the previous digest.
+
+# The base image's own global npm install (/usr/local/lib/node_modules/npm/node_modules/*), not a
+# dependency of this app. The container's CMD is `node server.js`, which never shells out to npm,
+# so these copies are not on a request path. Not fixable from this repo: they move only when the
+# base image ships a newer bundled npm. npm in this digest is 11.19.1.
+#
+# brace-expansion 5.0.9: DoS via stack exhaustion (CVE-2026-102276, fixed in 5.0.10) and via
+# nested-brace recursion (CVE-2026-102278, fixed in 5.0.11).
+# undici 6.28.0: DoS via an unrequested WebSocket subprotocol (CVE-2026-19534, fixed in 6.28.1).
+CVE-2026-102276 exp:2026-12-02
+CVE-2026-102278 exp:2026-12-02
+CVE-2026-19534 exp:2026-12-02

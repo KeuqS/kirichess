@@ -1,0 +1,58 @@
+---
+description: KiriChess project overview - stack, paths, verify commands. Always loaded.
+alwaysApply: true
+---
+
+> Mirrors [.claude/rules/project.md](../../.claude/rules/project.md) - keep both in sync when editing either.
+
+# KiriChess - project overview
+
+Single source of truth for repo layout and verification commands. Read this before any cross-cutting work.
+
+## Stack
+
+- **Backend:** ASP.NET Core minimal API, EF Core, PostgreSQL, Redis, SignalR - `src/KiriChess.Server/`
+- **Engine:** `src/KiriChess.Engine/` (pure chess logic)
+- **Frontend:** Next.js App Router - `ui/` (package name is `"web"`, directory is `ui/`)
+- **Tests:** `tests/KiriChess.Server.Tests/`, `tests/KiriChess.Engine.Tests/`, `tests/KiriChess.Simulator.Tests/`
+- **Simulator:** `simulator/KiriChess.Simulator/` (Stockfish / random self-play through the engine)
+- **Solution:** `KiriChess.slnx` (not `.sln`)
+
+## Path map (do not use legacy names)
+
+| Wrong (old template)             | Correct (KiriChess)     |
+| -------------------------------- | ----------------------- |
+| `backend/`                       | `src/KiriChess.Server/` |
+| `src/` as frontend               | `ui/`                   |
+| `frontend/`, `web/`              | `ui/`                   |
+| Scattered `CLAUDE.md` in subdirs | `.claude/rules/*.md`    |
+
+## Verify before declaring done
+
+```bash
+dotnet test KiriChess.slnx
+cd ui && npm run lint && npx tsc --noEmit && npm test && npm run build
+cd ui && npm run gen:api:check   # OpenAPI client freshness
+```
+
+## Conventions location
+
+Project conventions live in `.claude/rules/`:
+
+- `.claude/rules/project.md` - this file
+- `.claude/rules/frontend.md` - Next.js / `ui/` patterns
+- `.claude/rules/styling.md` - how `ui/` looks: tokens, page shells, type, cards, buttons, forms
+- `.claude/rules/backend.md` - C# server patterns
+- `.claude/rules/realtime.md` - SignalR, live games, clocks
+- `.claude/rules/engine.md` - chess rules and determinism
+- `.claude/rules/security.md` - auth, sessions, rate limiting
+- `.claude/rules/testing.md` - which tests a change needs
+
+Human documentation lives under `docs/` - map in [`docs/README.md`](../../docs/README.md). Living drafts in `docs/plans/` are not standing rules. Do not drop new standing docs at `docs/*.md`; they belong in `game/`, `ops/`, `decisions/`, `legal/`, or `audits/`. `docs/RULES.md` and `docs/ROADMAP.md` stay at that root on purpose.
+
+## OpenAPI / API client
+
+HTTP DTOs are generated - do not hand-write mirrors in `ui/lib/types.ts`. After backend API changes:
+
+1. Export OpenAPI: `dotnet run --project src/KiriChess.Server -- --export-openapi docs/api/openapi.json`
+2. Regenerate client: `cd ui && npm run gen:api`

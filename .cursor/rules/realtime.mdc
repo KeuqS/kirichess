@@ -1,0 +1,55 @@
+---
+description: SignalR hubs and distributed live-game state - hub contract, ownership routing, clock correctness.
+globs: src/KiriChess.Server/Games/**, src/KiriChess.Server/Infrastructure/Hub*.cs
+alwaysApply: false
+---
+
+> Mirrors [.claude/rules/realtime.md](../../.claude/rules/realtime.md) - keep both in sync when editing either.
+
+# Realtime rules - SignalR hubs & distributed live-game state
+
+Applies to `src/KiriChess.Server/Games/` (hubs) and `src/KiriChess.Server/Games/Distributed/`
+(cross-instance game ownership). Read this before touching anything that runs during a live game.
+
+## Hubs
+
+- Two hubs, both declared in `HubContract.cs`: `/hubs/game` ([GameHub.cs](../../src/KiriChess.Server/Games/GameHub.cs)) and `/hubs/presence` ([PresenceHub.cs](../../src/KiriChess.Server/Games/PresenceHub.cs)).
+- **`HubContract.cs` is the wire surface, not documentation.** Every server→client push (`ServerEvents`) and every client-callable method (`ClientMethods`) is declared there once. Two test suites enforce it: `HubContractTests` fails if a `SendAsync`/`InvokeAsync` call site or a `conn.on`/`invoke` in `ui/` names something not declared, and `OpenApiContractTests` fails if the committed OpenAPI document (which `HubPayloadDocumentTransformer` derives from this file) goes stale.
+- **Adding a hub event or method means adding a line to `HubContract.cs` first.** Do this before writing the handler - the guards above only catch a mismatch, they don't create the declaration for you.
+- `GameHub.JoinAsSpectator` is the one method reachable anonymously (Phase 8.1) - any other new method defaults to requiring the caller be authenticated and a participant; don't widen anonymous access without an explicit reason.
+
+## Distributed live-game state
+
+Production is not guaranteed to be one instance forever, and a live game's authoritative state lives in-process on whichever node owns it. `Games/Distributed/` is how a move reaches the right node and how ownership survives a node dying:
+
+- [LiveGameIndex.cs](../../src/KiriChess.Server/Games/Distributed/LiveGameIndex.cs) - the Redis-backed map of game id → owning instance.
+- [GameCommandRouter.cs](../../src/KiriChess.Server/Games/Distributed/GameCommandRouter.cs) - routes an incoming command (move, resign, draw offer) to the owning instance if it isn't this one.
+- [GameOwnershipHeartbeat.cs](../../src/KiriChess.Server/Games/Distributed/GameOwnershipHeartbeat.cs) - how an instance proves it's still alive and holding a game, and what happens when it stops.
+- [GameReconnectNotice.cs](../../src/KiriChess.Server/Games/Distributed/GameReconnectNotice.cs) - the signal sent when a player's connection needs to be told to reconnect (e.g. after ownership moved).
+
+**Any new game action needs to go through the router, not assume it's running on the owning instance.** Mirror an existing action's path (e.g. how `SubmitMove` reaches `GameActionExecutor.cs`) rather than adding a new direct in-process call.
+
+Test patterns to mirror for anything touching this layer: `DistributedLiveStateTests.cs`, `TwoInstanceGameTests.cs` (spins up two real instances), `LiveGameDurabilityTests.cs`, `GameOwnershipTests.cs`.
+
+## Hub guardrails - apply, don't bypass
+
+- [HubRateLimitFilter.cs](../../src/KiriChess.Server/Infrastructure/HubRateLimitFilter.cs) - rate limiting for hub methods, the hub-side counterpart to the HTTP `RateLimiting.cs`. A new mutating hub method needs this filter, the same way a new HTTP endpoint needs an HTTP rate-limit policy.
+- [HubConnectionBudget.cs](../../src/KiriChess.Server/Infrastructure/HubConnectionBudget.cs) - caps concurrent hub connections per user/instance. Don't add a code path that opens a hub connection outside what this budget accounts for.
+- Test patterns: `HubConnectionBudgetTests.cs`, `HubConnectionBudgetEndToEndTests.cs`.
+
+## Clock correctness - never `DateTime.Now`/`UtcNow` for game time
+
+[IGameClock.cs](../../src/KiriChess.Server/Games/IGameClock.cs) draws a hard line, and it matters more here than almost anywhere else in the codebase:
+
+- `UtcNow` (wall clock) is only for instants that get **persisted or displayed** (`CreatedAt`, `EndedAt`).
+- `Timestamp` + `Elapsed(...)` (monotonic, `Stopwatch`-based) is the **only** correct way to measure an interval - a wall clock can step (NTP correction, VM live-migration, host clock sync), and KiriChess charges think-time straight off measured intervals, so a clock step directly steals or grants seconds on a player's flag.
+- Rule of thumb from the source doc comment: **wall clock for instants, monotonic for intervals.** Anything touching flag-fall ([FlagFallMonitor.cs](../../src/KiriChess.Server/Games/FlagFallMonitor.cs)) or think-time deduction must use `IGameClock`, injected - never call `DateTime.Now`/`DateTimeOffset.UtcNow` directly inside that logic, and never subtract two wall-clock readings to get a duration.
+- Tests use `FakeGameClock.cs` to control both readings deterministically - new clock-sensitive logic should be testable the same way, not by sleeping in a test.
+
+## Verify
+
+```bash
+dotnet test KiriChess.slnx --filter "FullyQualifiedName~Hub|FullyQualifiedName~Distributed|FullyQualifiedName~GameOwnership|FullyQualifiedName~TwoInstance"
+```
+
+Full suite (`dotnet test KiriChess.slnx`) before calling realtime work done - the two-instance and durability tests are exactly the ones a narrow change is most likely to break without a fast local signal otherwise.

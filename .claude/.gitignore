@@ -1,0 +1,5 @@
+# Per-machine permission overrides - not shared with teammates or CI.
+settings.local.json
+
+# Transient git worktrees created by cloud/background agents - never durable content.
+worktrees/

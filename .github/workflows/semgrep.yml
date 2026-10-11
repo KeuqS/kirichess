@@ -1,0 +1,59 @@
+name: Static analysis
+
+# Phase 10c.2: Semgrep as an ordinary CI job that never talks to GitHub's code-scanning API.
+# Added 2026-08-18 when the repo was private (CodeQL needs Advanced Security, unpaid on a private
+# personal-account repo). 2026-08-19 the owner relicensed and is making the repo public; Semgrep
+# stays even after CodeQL is restored - two analysers, not a swap. See docs/ROADMAP.md 10c.2.
+#
+# Same trigger shape codeql.yml used: a PR-only trigger never rescans a file nobody has touched
+# since, and a ruleset update can turn untouched code into a new finding.
+# Same de-duplication as ci.yml, and for the same reason: the release PR's head branch is dev,
+# so listing dev under `push` ran this workflow twice on every commit. See ci.yml for the full
+# note. A push to dev with no open PR now runs nothing here either.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: semgrep-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    # C-1-10: this job fires on every PR and every push to main with no runtime bound before now.
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    # Pinned by digest for the same reproducibility reason 10c.3 pins the app's own base images -
+    # Dependabot's docker ecosystem entry watches this tag too, so a moved digest still surfaces
+    # as a PR rather than silently changing what CI runs.
+    container:
+      image: semgrep/semgrep@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      # `semgrep scan`, not `semgrep ci`: the latter wants a SEMGREP_APP_TOKEN and uploads results
+      # to Semgrep Cloud - the same shape of entitlement CodeQL needed and this repo doesn't have.
+      # `scan` runs entirely inside this container against the public registry rulesets below and
+      # writes only to this job's own log; nothing is uploaded anywhere, which is the whole point
+      # of this road over CodeQL's. `--error` is what turns a finding into a failed check; without
+      # it `scan` reports and exits 0. `--metrics off` skips Semgrep's anonymous usage ping, same
+      # privacy default this repo applies elsewhere (see docs/legal/PRIVACY.md). `scan` honours
+      # .gitignore by default (and .semgrepignore), so local `.env*` files never reach this job:
+      # they are gitignored and not in the checkout.
+      - name: Semgrep scan
+        run: |
+          semgrep scan \
+            --config p/security-audit \
+            --config p/owasp-top-ten \
+            --config p/csharp \
+            --config p/typescript \
+            --config p/javascript \
+            --config p/nextjs \
+            --config p/docker \
+            --error \
+            --metrics off

@@ -1,0 +1,2267 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "KiriChess Public API",
+    "description": "The published bot/HTTP API (Phase 9f.5). Authenticate with a personal access token issued at POST /api/account/api-tokens (first-party, JWT only). Raw tokens start with `kirichess_pat_` and carry `read` and/or `play`. The 43-character secret is followed by a 6-character CRC-32 checksum. API-created games and challenges are always unrated; rated play is hub JoinQueue remapped onto bot:{preset}. Live clocks stay on /hubs/game. Those payloads are not HTTP, so they live in components.schemas referenced by no path, each marked with the x-kirichess-transport extension naming the hub and the event or method; /hubs/presence is omitted because an API token cannot authenticate there. How to call it is documented at https://kirichess.com/developers.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.kirichess.com"
+    }
+  ],
+  "paths": {
+    "/api/v1/account": {
+      "get": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicAccountDto"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/account/playing": {
+      "get": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PublicPlayingGameDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/games/mine": {
+      "get": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "parameters": [
+          {
+            "name": "take",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "skip",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "before",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "beforeId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/GameHistoryEntryDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/games/{id}": {
+      "get": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameStateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/v1/games/{id}/legal-moves": {
+      "get": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/v1/games/{id}/replay": {
+      "get": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReplayResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/v1/games/{id}/pgn": {
+      "get": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/x-chess-pgn": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/v1/ratings/me": {
+      "get": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RatingDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/leaderboards/bot/{pool}": {
+      "get": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "parameters": [
+          {
+            "name": "pool",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "includeProvisional",
+            "in": "query",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LeaderboardEntryDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/v1/seeks": {
+      "get": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/OpenSeekDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "503": {
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
+    "/api/v1/challenges/mine": {
+      "get": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ChallengeDto"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/api/v1/games": {
+      "post": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameStateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/games/{id}/moves": {
+      "post": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MoveResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden"
+          }
+        }
+      }
+    },
+    "/api/v1/games/{id}/resign": {
+      "post": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GameStateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/challenges": {
+      "post": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChallengeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "429": {
+            "description": "Too Many Requests"
+          }
+        }
+      }
+    },
+    "/api/v1/challenges/{token}/accept": {
+      "post": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChallengeAcceptedDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request"
+          },
+          "403": {
+            "description": "Forbidden"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        }
+      }
+    },
+    "/api/v1/challenges/{token}": {
+      "delete": {
+        "tags": [
+          "KiriChess.Server"
+        ],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ChallengeAcceptedDto": {
+        "required": [
+          "gameId",
+          "yourColour",
+          "pool"
+        ],
+        "type": "object",
+        "properties": {
+          "gameId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "yourColour": {
+            "enum": [
+              "White",
+              "Black"
+            ],
+            "type": "string"
+          },
+          "pool": {
+            "type": "string"
+          }
+        }
+      },
+      "ChallengeAcceptedEvent": {
+        "required": [
+          "token",
+          "gameId",
+          "yourColour",
+          "pool"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "gameId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "yourColour": {
+            "enum": [
+              "White",
+              "Black"
+            ],
+            "type": "string"
+          },
+          "pool": {
+            "type": "string"
+          }
+        },
+        "x-kirichess-transport": {
+          "hub": "/hubs/game",
+          "event": "ChallengeAccepted"
+        }
+      },
+      "ChallengeDto": {
+        "required": [
+          "token",
+          "challengerName",
+          "pool",
+          "colour",
+          "status",
+          "createdAt",
+          "expiresAt",
+          "gameId",
+          "economy",
+          "challengerIsBot"
+        ],
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "challengerName": {
+            "type": "string"
+          },
+          "pool": {
+            "type": "string"
+          },
+          "colour": {
+            "enum": [
+              "White",
+              "Black",
+              "Random"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "Open",
+              "Accepted",
+              "Cancelled",
+              "Expired"
+            ],
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "gameId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "economy": {
+            "$ref": "#/components/schemas/EconomyDto"
+          },
+          "challengerIsBot": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ClockEventDto": {
+        "required": [
+          "type",
+          "side",
+          "amount",
+          "detail"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "CaptureGain",
+              "CaptureLoss",
+              "MovementToll",
+              "CheckGain",
+              "CheckLoss",
+              "PromotionCost",
+              "CastleCost",
+              "Increment",
+              "RepetitionNullified",
+              "FlagFall"
+            ],
+            "type": "string"
+          },
+          "side": {
+            "enum": [
+              "White",
+              "Black"
+            ],
+            "type": "string"
+          },
+          "amount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CreateChallengeRequest": {
+        "required": [
+          "pool",
+          "colour"
+        ],
+        "type": "object",
+        "properties": {
+          "pool": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "colour": {
+            "enum": [
+              "White",
+              "Black",
+              "Random"
+            ],
+            "type": "string"
+          },
+          "custom": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CustomConfigDto"
+              }
+            ]
+          }
+        }
+      },
+      "CreateGameRequest": {
+        "required": [
+          "opponentId",
+          "preset",
+          "rated"
+        ],
+        "type": "object",
+        "properties": {
+          "opponentId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "preset": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rated": {
+            "type": "boolean"
+          },
+          "custom": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CustomConfigDto"
+              }
+            ]
+          }
+        }
+      },
+      "CustomConfigDto": {
+        "required": [
+          "startTimeSeconds",
+          "baseIncrement",
+          "economyScale",
+          "pieceValues",
+          "captureMult",
+          "captureCaptorGainEnabled",
+          "captureVictimLossEnabled",
+          "moveCostMode",
+          "moveCostPerPiece",
+          "castleCostFlat",
+          "moveCostFlat",
+          "moveCostPerSquare",
+          "checkCheckerGain",
+          "checkVictimLoss",
+          "doubleCheckChipMultiplier",
+          "promotionCostMult",
+          "repeatedPositionNullifiesTime",
+          "threefoldRepetitionIsDraw",
+          "flagFallLoses",
+          "flagVsInsufficientMaterialIsDraw"
+        ],
+        "type": "object",
+        "properties": {
+          "startTimeSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "baseIncrement": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "economyScale": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pieceValues": {
+            "$ref": "#/components/schemas/PieceInts5Dto"
+          },
+          "captureMult": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "captureCaptorGainEnabled": {
+            "type": "boolean"
+          },
+          "captureVictimLossEnabled": {
+            "type": "boolean"
+          },
+          "moveCostMode": {
+            "enum": [
+              "None",
+              "Flat",
+              "PerPiece",
+              "Distance",
+              "PerPieceXDistance"
+            ],
+            "type": "string"
+          },
+          "moveCostPerPiece": {
+            "$ref": "#/components/schemas/PieceInts6Dto"
+          },
+          "castleCostFlat": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "moveCostFlat": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "moveCostPerSquare": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "checkCheckerGain": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "checkVictimLoss": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "doubleCheckChipMultiplier": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "promotionCostMult": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "repeatedPositionNullifiesTime": {
+            "type": "boolean"
+          },
+          "threefoldRepetitionIsDraw": {
+            "type": "boolean"
+          },
+          "flagFallLoses": {
+            "type": "boolean"
+          },
+          "flagVsInsufficientMaterialIsDraw": {
+            "type": "boolean"
+          }
+        }
+      },
+      "DrawOfferedDto": {
+        "required": [
+          "bySide"
+        ],
+        "type": "object",
+        "properties": {
+          "bySide": {
+            "enum": [
+              "White",
+              "Black"
+            ],
+            "type": "string"
+          }
+        },
+        "x-kirichess-transport": {
+          "hub": "/hubs/game",
+          "event": "DrawOffered"
+        }
+      },
+      "EconomyDto": {
+        "required": [
+          "startTimeSeconds",
+          "economyScale",
+          "pieceValues",
+          "captureMult",
+          "captureCaptorGainEnabled",
+          "captureVictimLossEnabled",
+          "moveCostMode",
+          "moveCostPerPiece",
+          "castleCostFlat",
+          "moveCostFlat",
+          "moveCostPerSquare",
+          "promotionCostMult",
+          "checkCheckerGain",
+          "checkVictimLoss",
+          "doubleCheckChipMultiplier",
+          "baseIncrement",
+          "repeatedPositionNullifiesTime",
+          "threefoldRepetitionIsDraw",
+          "flagFallLoses",
+          "flagVsInsufficientMaterialIsDraw"
+        ],
+        "type": "object",
+        "properties": {
+          "startTimeSeconds": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "economyScale": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pieceValues": {
+            "$ref": "#/components/schemas/PieceInts5Dto"
+          },
+          "captureMult": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "captureCaptorGainEnabled": {
+            "type": "boolean"
+          },
+          "captureVictimLossEnabled": {
+            "type": "boolean"
+          },
+          "moveCostMode": {
+            "enum": [
+              "None",
+              "Flat",
+              "PerPiece",
+              "Distance",
+              "PerPieceXDistance"
+            ],
+            "type": "string"
+          },
+          "moveCostPerPiece": {
+            "$ref": "#/components/schemas/PieceInts6Dto"
+          },
+          "castleCostFlat": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "moveCostFlat": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "moveCostPerSquare": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "promotionCostMult": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "checkCheckerGain": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "checkVictimLoss": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "doubleCheckChipMultiplier": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "baseIncrement": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "repeatedPositionNullifiesTime": {
+            "type": "boolean"
+          },
+          "threefoldRepetitionIsDraw": {
+            "type": "boolean"
+          },
+          "flagFallLoses": {
+            "type": "boolean"
+          },
+          "flagVsInsufficientMaterialIsDraw": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "required": [
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "GameEndedDto": {
+        "required": [
+          "state"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/GameStateResponse"
+          },
+          "ratingChange": {
+            "required": [
+              "white",
+              "black"
+            ],
+            "type": "object",
+            "properties": {
+              "white": {
+                "required": [
+                  "before",
+                  "after"
+                ],
+                "type": "object",
+                "properties": {
+                  "before": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "after": {
+                    "type": "number",
+                    "format": "double"
+                  }
+                }
+              },
+              "black": {
+                "required": [
+                  "before",
+                  "after"
+                ],
+                "type": "object",
+                "properties": {
+                  "before": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "after": {
+                    "type": "number",
+                    "format": "double"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-kirichess-transport": {
+          "hub": "/hubs/game",
+          "event": "GameEnded"
+        }
+      },
+      "GameHistoryEntryDto": {
+        "required": [
+          "gameId",
+          "opponentId",
+          "opponentName",
+          "mySide",
+          "result",
+          "termination",
+          "ratingPool",
+          "isRated",
+          "plyCount",
+          "createdAt",
+          "endedAt",
+          "ratingBefore",
+          "ratingAfter"
+        ],
+        "type": "object",
+        "properties": {
+          "gameId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "opponentId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "opponentName": {
+            "type": "string"
+          },
+          "mySide": {
+            "enum": [
+              "White",
+              "Black"
+            ],
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "Ongoing",
+              "WhiteWins",
+              "BlackWins",
+              "Draw",
+              "Aborted"
+            ],
+            "type": "string"
+          },
+          "termination": {
+            "enum": [
+              "None",
+              "Checkmate",
+              "Flagfall",
+              "Stalemate",
+              "Resignation",
+              "DrawByRepetition",
+              "DrawByInsufficientMaterial",
+              "DrawByFiftyMove",
+              "Abandoned",
+              "DrawByAgreement",
+              "ServerRestart",
+              "NoShow"
+            ],
+            "type": "string"
+          },
+          "ratingPool": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isRated": {
+            "type": "boolean"
+          },
+          "plyCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "ratingBefore": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          },
+          "ratingAfter": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "GameSnapshotDto": {
+        "required": [
+          "state",
+          "legalMoves",
+          "moves"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/GameStateResponse"
+          },
+          "legalMoves": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "moves": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpectatorMoveDto"
+            }
+          }
+        },
+        "x-kirichess-transport": {
+          "hub": "/hubs/game",
+          "method": "JoinGame"
+        }
+      },
+      "GameStateResponse": {
+        "required": [
+          "gameId",
+          "fen",
+          "sideToMove",
+          "whiteTime",
+          "blackTime",
+          "status",
+          "winner",
+          "termination",
+          "whitePlayerId",
+          "blackPlayerId",
+          "moveCount",
+          "economy",
+          "rated",
+          "activeClockOffsetMs"
+        ],
+        "type": "object",
+        "properties": {
+          "gameId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "fen": {
+            "type": "string"
+          },
+          "sideToMove": {
+            "enum": [
+              "White",
+              "Black"
+            ],
+            "type": "string"
+          },
+          "whiteTime": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blackTime": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "enum": [
+              "Ongoing",
+              "Checkmate",
+              "Stalemate",
+              "FlagFall",
+              "DrawByRepetition",
+              "DrawByInsufficientMaterial",
+              "DrawByFiftyMove",
+              "Aborted"
+            ],
+            "type": "string"
+          },
+          "winner": {
+            "enum": [
+              "White",
+              "Black",
+              null
+            ],
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "termination": {
+            "enum": [
+              "None",
+              "Checkmate",
+              "Flagfall",
+              "Stalemate",
+              "Resignation",
+              "DrawByRepetition",
+              "DrawByInsufficientMaterial",
+              "DrawByFiftyMove",
+              "Abandoned",
+              "DrawByAgreement",
+              "ServerRestart",
+              "NoShow"
+            ],
+            "type": "string"
+          },
+          "whitePlayerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blackPlayerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "moveCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "economy": {
+            "$ref": "#/components/schemas/EconomyDto"
+          },
+          "rated": {
+            "type": "boolean"
+          },
+          "activeClockOffsetMs": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rematchOfferedById": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "whiteViaApi": {
+            "type": "boolean",
+            "default": false
+          },
+          "blackViaApi": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "LeaderboardEntryDto": {
+        "required": [
+          "rank",
+          "userId",
+          "displayName",
+          "rating",
+          "ratingDeviation",
+          "gamesPlayed",
+          "provisional",
+          "patronTier",
+          "avatarUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "number",
+            "format": "double"
+          },
+          "ratingDeviation": {
+            "type": "number",
+            "format": "double"
+          },
+          "gamesPlayed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "provisional": {
+            "type": "boolean"
+          },
+          "patronTier": {
+            "enum": [
+              "None",
+              "Pawn",
+              "Knight",
+              "Bishop",
+              "Rook",
+              "Queen"
+            ],
+            "type": "string"
+          },
+          "avatarUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "MatchFoundDto": {
+        "required": [
+          "gameId",
+          "color",
+          "pool"
+        ],
+        "type": "object",
+        "properties": {
+          "gameId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "color": {
+            "enum": [
+              "White",
+              "Black"
+            ],
+            "type": "string"
+          },
+          "pool": {
+            "type": "string"
+          }
+        },
+        "x-kirichess-transport": {
+          "hub": "/hubs/game",
+          "event": "MatchFound"
+        }
+      },
+      "MovePlayedDto": {
+        "required": [
+          "state",
+          "uci",
+          "whiteDelta",
+          "blackDelta",
+          "events",
+          "legalMoves",
+          "gameOver"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/GameStateResponse"
+          },
+          "uci": {
+            "type": "string"
+          },
+          "whiteDelta": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blackDelta": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClockEventDto"
+            }
+          },
+          "legalMoves": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "gameOver": {
+            "type": "boolean"
+          },
+          "ratingChange": {
+            "required": [
+              "white",
+              "black"
+            ],
+            "type": "object",
+            "properties": {
+              "white": {
+                "required": [
+                  "before",
+                  "after"
+                ],
+                "type": "object",
+                "properties": {
+                  "before": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "after": {
+                    "type": "number",
+                    "format": "double"
+                  }
+                }
+              },
+              "black": {
+                "required": [
+                  "before",
+                  "after"
+                ],
+                "type": "object",
+                "properties": {
+                  "before": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "after": {
+                    "type": "number",
+                    "format": "double"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-kirichess-transport": {
+          "hub": "/hubs/game",
+          "event": "MovePlayed"
+        }
+      },
+      "MoveRequest": {
+        "required": [
+          "uci"
+        ],
+        "type": "object",
+        "properties": {
+          "uci": {
+            "type": "string"
+          }
+        }
+      },
+      "MoveResponse": {
+        "required": [
+          "state",
+          "whiteDelta",
+          "blackDelta",
+          "events",
+          "gameOver"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/GameStateResponse"
+          },
+          "whiteDelta": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blackDelta": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClockEventDto"
+            }
+          },
+          "gameOver": {
+            "type": "boolean"
+          }
+        }
+      },
+      "OpenSeekDto": {
+        "required": [
+          "pool",
+          "waitingSinceUtc"
+        ],
+        "type": "object",
+        "properties": {
+          "pool": {
+            "type": "string"
+          },
+          "waitingSinceUtc": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "OpponentDisconnectedDto": {
+        "required": [
+          "graceSeconds"
+        ],
+        "type": "object",
+        "properties": {
+          "graceSeconds": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "x-kirichess-transport": {
+          "hub": "/hubs/game",
+          "event": "OpponentDisconnected"
+        }
+      },
+      "PieceInts5Dto": {
+        "required": [
+          "pawn",
+          "knight",
+          "bishop",
+          "rook",
+          "queen"
+        ],
+        "type": "object",
+        "properties": {
+          "pawn": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "knight": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "bishop": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rook": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "queen": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PieceInts6Dto": {
+        "required": [
+          "pawn",
+          "knight",
+          "bishop",
+          "rook",
+          "queen",
+          "king"
+        ],
+        "type": "object",
+        "properties": {
+          "pawn": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "knight": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "bishop": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "rook": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "queen": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "king": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "PublicAccountDto": {
+        "required": [
+          "id",
+          "displayName",
+          "scopes"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PublicPlayingGameDto": {
+        "required": [
+          "gameId",
+          "ratingPool",
+          "isRated",
+          "mySide",
+          "whitePlayerId",
+          "blackPlayerId",
+          "sideToMove",
+          "moveCount"
+        ],
+        "type": "object",
+        "properties": {
+          "gameId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ratingPool": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isRated": {
+            "type": "boolean"
+          },
+          "mySide": {
+            "enum": [
+              "White",
+              "Black"
+            ],
+            "type": "string"
+          },
+          "whitePlayerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blackPlayerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sideToMove": {
+            "enum": [
+              "White",
+              "Black"
+            ],
+            "type": "string"
+          },
+          "moveCount": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "RatingDto": {
+        "required": [
+          "pool",
+          "rating",
+          "ratingDeviation",
+          "volatility",
+          "gamesPlayed",
+          "provisional",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "pool": {
+            "type": "string"
+          },
+          "rating": {
+            "type": "number",
+            "format": "double"
+          },
+          "ratingDeviation": {
+            "type": "number",
+            "format": "double"
+          },
+          "volatility": {
+            "type": "number",
+            "format": "double"
+          },
+          "gamesPlayed": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "provisional": {
+            "type": "boolean"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RematchAcceptedDto": {
+        "required": [
+          "gameId",
+          "whitePlayerId",
+          "blackPlayerId",
+          "pool",
+          "rated"
+        ],
+        "type": "object",
+        "properties": {
+          "gameId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "whitePlayerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blackPlayerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "pool": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "rated": {
+            "type": "boolean"
+          }
+        },
+        "x-kirichess-transport": {
+          "hub": "/hubs/game",
+          "event": "RematchAccepted"
+        }
+      },
+      "ReplayPlyDto": {
+        "required": [
+          "ply",
+          "uci",
+          "san",
+          "mover",
+          "fenAfter",
+          "whiteTimeAfter",
+          "blackTimeAfter",
+          "whiteDelta",
+          "blackDelta",
+          "events"
+        ],
+        "type": "object",
+        "properties": {
+          "ply": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "uci": {
+            "type": "string"
+          },
+          "san": {
+            "type": "string"
+          },
+          "mover": {
+            "enum": [
+              "White",
+              "Black"
+            ],
+            "type": "string"
+          },
+          "fenAfter": {
+            "type": "string"
+          },
+          "whiteTimeAfter": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blackTimeAfter": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "whiteDelta": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blackDelta": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClockEventDto"
+            }
+          }
+        }
+      },
+      "ReplayResponse": {
+        "required": [
+          "gameId",
+          "startFen",
+          "whitePlayerId",
+          "blackPlayerId",
+          "whitePlayerName",
+          "blackPlayerName",
+          "whitePatronTier",
+          "blackPatronTier",
+          "result",
+          "termination",
+          "ratingPool",
+          "isRated",
+          "createdAt",
+          "endedAt",
+          "economy",
+          "plies",
+          "truncatedAtPly"
+        ],
+        "type": "object",
+        "properties": {
+          "gameId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "startFen": {
+            "type": "string"
+          },
+          "whitePlayerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "blackPlayerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "whitePlayerName": {
+            "type": "string"
+          },
+          "blackPlayerName": {
+            "type": "string"
+          },
+          "whitePatronTier": {
+            "enum": [
+              "None",
+              "Pawn",
+              "Knight",
+              "Bishop",
+              "Rook",
+              "Queen"
+            ],
+            "type": "string"
+          },
+          "blackPatronTier": {
+            "enum": [
+              "None",
+              "Pawn",
+              "Knight",
+              "Bishop",
+              "Rook",
+              "Queen"
+            ],
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "Ongoing",
+              "WhiteWins",
+              "BlackWins",
+              "Draw",
+              "Aborted"
+            ],
+            "type": "string"
+          },
+          "termination": {
+            "enum": [
+              "None",
+              "Checkmate",
+              "Flagfall",
+              "Stalemate",
+              "Resignation",
+              "DrawByRepetition",
+              "DrawByInsufficientMaterial",
+              "DrawByFiftyMove",
+              "Abandoned",
+              "DrawByAgreement",
+              "ServerRestart",
+              "NoShow"
+            ],
+            "type": "string"
+          },
+          "ratingPool": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isRated": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "endedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "economy": {
+            "$ref": "#/components/schemas/EconomyDto"
+          },
+          "plies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReplayPlyDto"
+            }
+          },
+          "truncatedAtPly": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "SpectatorMoveDto": {
+        "required": [
+          "ply",
+          "uci",
+          "mover",
+          "whiteTimeAfter",
+          "blackTimeAfter",
+          "whiteDelta",
+          "blackDelta"
+        ],
+        "type": "object",
+        "properties": {
+          "ply": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "uci": {
+            "type": "string"
+          },
+          "mover": {
+            "enum": [
+              "White",
+              "Black"
+            ],
+            "type": "string"
+          },
+          "whiteTimeAfter": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blackTimeAfter": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "whiteDelta": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "blackDelta": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "x-kirichess-transport": {
+          "hub": "/hubs/game"
+        }
+      },
+      "SpectatorsChangedDto": {
+        "required": [
+          "count"
+        ],
+        "type": "object",
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "x-kirichess-transport": {
+          "hub": "/hubs/game",
+          "event": "SpectatorsChanged"
+        }
+      },
+      "SpectatorSnapshotDto": {
+        "required": [
+          "state",
+          "whiteName",
+          "blackName",
+          "whitePatronTier",
+          "blackPatronTier",
+          "moves",
+          "spectators"
+        ],
+        "type": "object",
+        "properties": {
+          "state": {
+            "$ref": "#/components/schemas/GameStateResponse"
+          },
+          "whiteName": {
+            "type": "string"
+          },
+          "blackName": {
+            "type": "string"
+          },
+          "whitePatronTier": {
+            "enum": [
+              "None",
+              "Pawn",
+              "Knight",
+              "Bishop",
+              "Rook",
+              "Queen"
+            ],
+            "type": "string"
+          },
+          "blackPatronTier": {
+            "enum": [
+              "None",
+              "Pawn",
+              "Knight",
+              "Bishop",
+              "Rook",
+              "Queen"
+            ],
+            "type": "string"
+          },
+          "moves": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SpectatorMoveDto"
+            }
+          },
+          "spectators": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "x-kirichess-transport": {
+          "hub": "/hubs/game",
+          "method": "JoinAsSpectator"
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "description": "A personal access token issued once at POST /api/account/api-tokens. Prefix kirichess_pat_, then 43 secret characters and a 6-character CRC-32 checksum. Scopes: read, play.",
+        "scheme": "bearer",
+        "bearerFormat": "API token (kirichess_pat_...)"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": [ ]
+    }
+  ],
+  "tags": [
+    {
+      "name": "KiriChess.Server"
+    }
+  ]
+}

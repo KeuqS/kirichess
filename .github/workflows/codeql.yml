@@ -1,0 +1,73 @@
+name: CodeQL
+
+# Restored 2026-08-19 once the repository is public: GitHub code scanning is free
+# on public personal-account repos. Deleted 2026-08-12 (`e6eb4d9`) while private.
+# Semgrep stays (semgrep.yml); this is a second analyser, not a swap.
+# See docs/ROADMAP.md 10c.2.
+#
+# Same trigger shape as semgrep.yml: a PR-only trigger never rescans a file
+# nobody has touched since, and a ruleset update can turn untouched code into
+# a new finding.
+# Same de-duplication as ci.yml, and for the same reason: the release PR's head branch is dev,
+# so listing dev under `push` ran this workflow twice on every commit. See ci.yml for the full
+# note. A push to dev with no open PR now runs nothing here either.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+  schedule:
+    - cron: "30 3 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    # C-1-10: this job fires on every PR and every push to main with no runtime bound before now.
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: csharp
+            build-mode: manual
+          - language: javascript-typescript
+            build-mode: none
+
+    steps:
+      # Phase 10c.2: pin to a commit SHA, not a mutable tag. Dependabot's
+      # github-actions ecosystem entry bumps these the same way as ci.yml.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - if: matrix.language == 'csharp'
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: github/codeql-action/init@f3712979fa5f215279b101dd0a2e3bdfb4353324 # v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      # C# needs a real build to extract from; JS/TS is analyzed from source
+      # (build-mode: none), same split ci.yml draws between its two jobs.
+      - if: matrix.build-mode == 'manual'
+        name: Build
+        run: |
+          dotnet restore KiriChess.slnx
+          dotnet build KiriChess.slnx --no-restore -c Release
+
+      - uses: github/codeql-action/analyze@f3712979fa5f215279b101dd0a2e3bdfb4353324 # v3
+        with:
+          category: "/language:${{ matrix.language }}"
+          # SARIF upload needs GitHub code scanning, which is free on public repos and not on a
+          # private personal-account repo. This repository is currently private, so upload would
+          # fail the job after a successful analysis. Keep analysing; upload once it is public.
+          upload: ${{ github.event.repository.private && 'never' || 'always' }}

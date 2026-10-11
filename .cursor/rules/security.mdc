@@ -1,0 +1,64 @@
+---
+description: Security rules for auth, sessions, authorization, and rate limiting - points to docs/decisions/AUTH.md's threat model, authorization defaults, IDOR, secrets handling. Apply when touching auth, sessions, permissions, or rate limiting anywhere in the codebase.
+alwaysApply: false
+---
+
+> Mirrors [.claude/rules/security.md](../../.claude/rules/security.md) - keep both in sync when editing either.
+
+# Security rules
+
+Applies to auth, session, authorization, and rate-limiting work across `src/KiriChess.Server/` and `ui/`.
+
+## Read this first: `docs/decisions/AUTH.md`
+
+[docs/decisions/AUTH.md](../../docs/decisions/AUTH.md) is a detailed, already-written threat model for this exact codebase - not generic advice. Before proposing a change to how sessions or tokens work, read it. It documents:
+
+- **Why** the access and refresh tokens both live in `localStorage` (a deliberate, dated decision - 2026-08-17 - not an oversight), including the three costs of the alternative (`HttpOnly` cookie) that decided against it.
+- What the CSP (`ui/next.config.ts`) actually stops (exfiltration via `fetch`, image URLs, form posts) and what it does **not** stop (`'unsafe-inline'` admits injected inline script; top-level navigation exfiltration has no CSP directive that survives it).
+- The moderator/2FA gap: the `mfa` claim rides the refresh-token chain, so a stolen moderator refresh token mints admin-scoped access tokens indefinitely without ever meeting a TOTP prompt. Accepted today on a narrow, named basis (exactly one `Admin` account, owned by the deployment owner).
+- **§1.7's four explicit triggers** that reopen the cookie decision: a second moderator, a third-party script added to the frontend origin, rendered user content beyond a display name, or staging and production converging to the same site. **If you're proposing "move tokens to a cookie," check whether one of these has actually fired before treating it as new information** - the doc already reasoned through this and rejected it for now.
+
+Do not re-propose the httpOnly-cookie move without reading §1.6 first - it explains why it isn't free (a real CSRF surface reopens, staging/prod behave differently under the Public Suffix List, and the Cloudflare Access removal that made bearer tokens safe in the first place gets partially undone).
+
+## Authorization defaults
+
+- Every mutating HTTP endpoint requires `.RequireAuthorization()` unless there's a stated reason for anonymous access (e.g. `GameHub.JoinAsSpectator`, Phase 8.1 - see `realtime.mdc`).
+- Admin-only paths are gated by `ModerationPolicies.Admin` ([ModerationPolicies.cs](../../src/KiriChess.Server/Moderation/ModerationPolicies.cs)), which requires both the `Admin` role and the `mfa` claim on the token. This is a claim-on-token check, not a per-action step-up - see the `docs/decisions/AUTH.md` §1.5 caveat above before assuming "2FA-gated" means "step-up verified."
+- There is exactly one role (`ModerationRoles.Admin`), seeded from config at boot (`ModerationSeeder`), not through a signup path. There is deliberately no self-service way to become a moderator.
+- **IDOR is the default failure mode to check for**, not an edge case: user id always comes from `ClaimsPrincipal`/`GetUserId` on the authenticated token, never from a client-supplied id in the route or body, for anything touching a game, account, report, or sanction. A `UserSanction` row carries `IssuedByUserId` specifically so an action is attributable to a person - don't build a path that lets that attribution be spoofed.
+
+## Rate limiting - pick the layer that matches the surface
+
+Three layers, defined in [RateLimiting.cs](../../src/KiriChess.Server/Infrastructure/RateLimiting.cs) (HTTP), [RedisRateLimiter.cs](../../src/KiriChess.Server/Infrastructure/RedisRateLimiter.cs) (distributed backing store), and [HubRateLimitFilter.cs](../../src/KiriChess.Server/Infrastructure/HubRateLimitFilter.cs) (SignalR hub methods). Named HTTP policies already exist for the common shapes - reuse one rather than inventing a fourth mechanism:
+
+| Policy                              | Partitioned by | Use for                                                                                 |
+| ----------------------------------- | -------------- | --------------------------------------------------------------------------------------- |
+| `RateLimitPolicies.Auth`            | client IP      | credential/email-sending endpoints (caller isn't authenticated yet)                     |
+| `RateLimitPolicies.GameCreate`      | user           | game creation (cheapest write to abuse)                                                 |
+| `RateLimitPolicies.GameMove`        | user           | move submission over HTTP (deliberately the loosest - see the policy's own doc comment) |
+| `RateLimitPolicies.Reports`         | user           | report submission                                                                       |
+| `RateLimitPolicies.Replay`          | client IP      | public replay reads (anonymous by design)                                               |
+| `RateLimitPolicies.DisplayName`     | user           | display-name changes (anti-script backstop; the cooldown is the actual product rule)    |
+| `RateLimitPolicies.AccountData`     | user           | export/erasure only (expensive, no legitimate high-frequency use)                       |
+| `RateLimitPolicies.AccountManage`   | user           | sessions, notification prefs, email status, avatar, push (must not share export budget) |
+| `RateLimitPolicies.Donations`       | user           | donation-reference mint and own-badge read (must not share the export/erasure budget)   |
+| `RateLimitPolicies.ApiTokenManage`  | user           | API-token mint/list/revoke (must be able to fill the ten-token cap in one sitting)      |
+| `RateLimitPolicies.TwoFactor`       | user           | 2FA enrolment/verification                                                              |
+| `RateLimitPolicies.ChallengeCreate` | user           | challenge/invitation creation                                                           |
+| `RateLimitPolicies.ApiAccount`      | user           | the ceiling over the whole of `/api/v1`, above the per-token partitions (S-4-2)         |
+
+A new mutating endpoint or hub method should match against this table before adding a new policy - if none fit, that's a signal to think about why, not just add one.
+
+`ApiAccount` is the one row you do not apply with `.RequireRateLimiting(...)`. The `/api/v1` routes are partitioned by **token id** (`ApiRead`, `ApiPlayCreate`, `ApiPlayMove`), which is the right primitive and stays; an account may hold ten active tokens, so `ApiAccount` is the per-user ceiling on top. It is wired into the **global limiter** in `RateLimiting.cs` rather than onto the group, because the middleware reads a single `EnableRateLimitingAttribute` off the endpoint: a group-level policy is replaced by the endpoint's own, not composed with it. Adding a new `/api/v1` route means picking a per-token policy from the three above; the account ceiling already covers it.
+
+## Secrets
+
+- Never hand-write a connection string, API token, or account id into `.mcp.json`, `.claude/settings.local.json`, `.cursor/`, or source. Env-var indirection only.
+- This is not hypothetical: `.claude/settings.local.json` previously contained a live Cloudflare API token and account id committed directly into an allow-rule. If you see a secret-shaped string in any config file under `.claude/` or `.cursor/`, treat it as a live incident, not a style nit - flag it and remove it.
+- `.claude/rules/` and `.cursor/rules/` are tracked. Local tool config under `.claude/` is gitignored, along with `settings.local.json` and `worktrees/`. Anything written into a tracked file is effectively public the moment it's committed, including in history after a later removal.
+
+## Verify
+
+```bash
+dotnet test KiriChess.slnx --filter "FullyQualifiedName~Auth|FullyQualifiedName~RateLimit|FullyQualifiedName~Moderation|FullyQualifiedName~Sanction"
+```

@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Gera.Chess" Version="1.2.0" />
+  </ItemGroup>
+
+  <!--
+    The single source of truth for every rule variable (see config/kirichess.rules.json). Embedded so
+    the engine carries its own rulebook: no file path to get wrong in a container, and no way to ship
+    a binary whose economy differs from the repo's. The web UI generates ui/lib/rules.generated.ts
+    from the same file, which is what keeps backend and frontend in lockstep.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\config\kirichess.rules.json"
+                      LogicalName="KiriChess.Engine.kirichess.rules.json" />
+  </ItemGroup>
+
+</Project>

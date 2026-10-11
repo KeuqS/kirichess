@@ -1,0 +1,20 @@
+name: Bug
+description: Something in the engine, API, or site is wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security issues belong in [private vulnerability reporting](https://github.com/MichielGekiere/kirichess/security/advisories/new), not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, what you got, and how to reproduce it.
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where
+      description: "URL, pool, or `dotnet test` filter if it is a test failure."

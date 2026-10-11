@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <Authors>Michiel Gekiere</Authors>
+    <Copyright>Copyright (c) 2026 Michiel Gekiere</Copyright>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MichielGekiere/kirichess</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MichielGekiere/kirichess.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+</Project>

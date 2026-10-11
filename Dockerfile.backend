@@ -1,0 +1,50 @@
+# Phase 10c.3: pinned by digest, not just tag - the tag is a moving target (whatever it pointed to
+# on build day), so "which image is production running" had no answer that survived a rebuild.
+# Dependabot's docker ecosystem (.github/dependabot.yml) bumps the digest as the tag moves.
+FROM mcr.microsoft.com/dotnet/sdk:10.0@sha256:72dd743782f2ae7e5476fd64f6a460045e3998dc862218b80e6944cba79a01b0 AS build
+WORKDIR /app
+
+# Copy solution and project files first so `restore` caches independently of source churn.
+COPY *.slnx ./
+COPY src/KiriChess.Engine/*.csproj src/KiriChess.Engine/
+COPY src/KiriChess.Server/*.csproj src/KiriChess.Server/
+COPY tests/KiriChess.Engine.Tests/*.csproj tests/KiriChess.Engine.Tests/
+COPY tests/KiriChess.Server.Tests/*.csproj tests/KiriChess.Server.Tests/
+
+RUN dotnet restore src/KiriChess.Server/KiriChess.Server.csproj
+
+COPY src/ src/
+# KiriChess.Engine.csproj embeds config/kirichess.rules.json via a repo-root-relative path
+# (..\..\config\kirichess.rules.json) as the single source of truth for every rule variable
+# (Phase 8.6). Without this copy `dotnet publish` fails at compile time looking for
+# /app/config/kirichess.rules.json.
+COPY config/ config/
+WORKDIR /app/src/KiriChess.Server
+RUN dotnet publish -c Release -o /out
+
+# --- Runtime ---
+# Same pinning reason as the build stage above.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0@sha256:a4556ed033fa96f984bb7a8d348851cb2d36b1281dd2420070045f664fbb5f94
+WORKDIR /app
+
+# curl is only here to serve the HEALTHCHECK below; the aspnet image ships without it.
+# openssl/libssl3t64 are upgraded in the same transaction: the pinned aspnet digest still
+# ships 3.0.13-0ubuntu3.12, and CVE-2026-84782 is fixed in 3.0.13-0ubuntu3.16. apt will
+# not upgrade a package it was not asked to install.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl openssl libssl3t64 \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /out .
+
+ENV ASPNETCORE_HTTP_PORTS=8080
+EXPOSE 8080
+
+# The aspnet image predefines a non-root user (UID 1654) as $APP_UID.
+USER $APP_UID
+
+# Liveness only: a slow database must not get the container restarted.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://localhost:8080/health || exit 1
+
+ENTRYPOINT ["dotnet", "KiriChess.Server.dll"]

@@ -1,0 +1,31 @@
+title = "KiriChess gitleaks config"
+
+# Keep the maintained default ruleset; only add to it below.
+[extend]
+useDefault = true
+
+# Personal mailboxes must not land in a commit that could be copied into a public
+# snapshot. The regex is domain-only so this file does not itself contain an address.
+[[rules]]
+id = "kirichess-personal-mailbox"
+description = "Personal mailbox domains (not product @kirichess.com addresses)"
+regex = '''(?i)[a-z0-9._%+\-]+@(?:gmail\.com|student\.howest\.be|howest\.be)'''
+
+[allowlist]
+description = "Test fixtures use synthetic, human-readable placeholder keys, never real credentials"
+paths = [
+  '''^tests/.*''',
+  # Wrangler CLI cache was committed in 23163ec; the file is now gitignored. This
+  # path keep history scans of that commit from failing gitleaks on every later push.
+  '''^\.wrangler/''',
+]
+regexes = [
+  # Deleted 2026-08-11 plan-doc example (docs/plans/phase9d8/README.md). 22-char
+  # URL-safe dummy, never a live credential. Still in git history; a full-repo
+  # gitleaks detect --log-opts="--all" hits it once.
+  '''u7Qb3xk9LmN2pRs4TvW1Zy''',
+  # /developers curl samples used this placeholder in 7d4cb72; gitleaks' curl-auth-header
+  # rule treated it as a live bearer. The page now uses $KIRICHESS_API_TOKEN; this keeps
+  # history scans from failing on the old string.
+  '''kc_YOUR_TOKEN''',
+]

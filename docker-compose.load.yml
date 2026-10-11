@@ -1,0 +1,55 @@
+# Overlay for the Phase 9b.3 local load & capacity measurement. Always layered ON TOP of
+# docker-compose.prod.yml, exactly like docker-compose.e2e.yml:
+#
+#   docker compose -p kirichess-load -f docker-compose.prod.yml -f docker-compose.load.yml up -d db redis backend
+#
+# An overlay rather than a fork, for the same reason as the E2E overlay: the run has to measure the
+# image that actually ships, and a copied compose file drifts silently. The frontend service is never
+# defined or started here, this measures the server, not the browser.
+
+# Anchored because the migrate service runs the same binary and needs the same configuration:
+# StartupValidation.ValidateJwt runs BEFORE the --migrate branch in Program.cs, so a migrate
+# container without a Jwt__Key fails at startup instead of applying the schema.
+x-load-env: &load-env
+  - ConnectionStrings__Postgres=Host=db;Port=5432;Database=kirichess;Username=postgres;Password=postgres
+  # Deliberately low-entropy and self-describing, exactly like docker-compose.e2e.yml's Jwt__Key:
+  # .gitleaks.toml allowlists tests/ by path and this file is not under tests/, so a random-looking
+  # 32-byte string here would fail the secret scan on the PR that adds it. Identity only needs >= 32
+  # bytes of key material (StartupValidation.MinimumJwtKeyBytes); in a throwaway stack it does not
+  # need to be unguessable.
+  - Jwt__Key=load-only-not-a-secret-please-do-not-use-this-key
+  # Gates GET /metrics (MetricsEndpoint.UseMetricsScrapeGuard). Port stays 0 (default), so only the
+  # bearer token is checked and the harness scrapes on the same published :8080 port it plays on.
+  - Metrics__ScrapeToken=load-only-not-a-secret-scrape-token
+  # Every load client shares one source IP, which is a property of the harness and not of production.
+  # These two policies are the only IP-partitioned ones in RateLimiting.cs; everything else -
+  # including the whole of HubRateLimitFilter, which sits in the move hot path - stays at production
+  # defaults (see README § Decision 7).
+  - RateLimiting__Auth__PermitsPerMinute=100000
+  - RateLimiting__Global__PermitsPerMinute=1000000
+  # README § Decision 5: an existing production knob, not a new one. Defaults to the production value
+  # (true) so every ladder rung measures LatencyProbe running normally; run-ladder sets
+  # LOAD_LAG_COMPENSATION=false for exactly one attribution run to isolate suspect #2's cost (the
+  # O(N^2) ConnectionsIn enumeration plus the 2N InvokeAsync fan-out) by disabling LatencyProbe
+  # entirely (its ExecuteAsync returns on the first branch when this is false).
+  - Clock__LagCompensationEnabled=${LOAD_LAG_COMPENSATION:-true}
+
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: postgres
+
+  migrate:
+    environment: *load-env
+
+  backend:
+    environment: *load-env
+    # Pin the backend's budget, driven by env vars so the ladder can run at two budgets without
+    # editing this file (README § Decision 3). Compose V2 honours deploy.resources.limits for
+    # `docker compose up`; run-ladder.ps1/.sh set LOAD_CPUS/LOAD_MEMORY per budget and the harness
+    # verifies with `docker inspect` before trusting any number.
+    deploy:
+      resources:
+        limits:
+          cpus: "${LOAD_CPUS:-1.0}"
+          memory: ${LOAD_MEMORY:-512m}

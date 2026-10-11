@@ -1,0 +1,19 @@
+{
+  "name": "kirichess-e2e",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Phase 9b.2 browser E2E. Deliberately its own package, not part of ui/, see Phase 9b.2 decision 3.",
+  "scripts": {
+    "stack:up": "node scripts/stack.mjs up",
+    "stack:down": "node scripts/stack.mjs down",
+    "stack:logs": "node scripts/stack.mjs logs",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.50.0",
+    "@types/node": "^26",
+    "typescript": "^5"
+  }
+}

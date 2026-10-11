@@ -1,0 +1,58 @@
+---
+description: Engine rules for src/KiriChess.Engine/ - config-driven rules, determinism, cost-vector testing.
+globs: src/KiriChess.Engine/**
+alwaysApply: false
+---
+
+> Mirrors [.claude/rules/engine.md](../../.claude/rules/engine.md) - keep both in sync when editing either.
+
+# Engine rules - `src/KiriChess.Engine/`
+
+Pure chess + clock-economy logic, wrapped by the server but knowing nothing about it: no database, no networking, no UI. This is the highest-traffic code path in the whole system - every move, in every live game, runs through it - and the one place a subtle bug is hardest to see from the outside (it looks like "the clock is wrong" or "that shouldn't have been legal," not a stack trace).
+
+## Layout
+
+```
+src/KiriChess.Engine/
+├── KiriChessEngine.cs   # entry point: NewGame, FromFen, LegalMoves, Apply
+├── Core/                # GamePosition (immutable), Move, ApplyResult, ClockEvent, Side, PieceType
+├── Config/              # KiriChessConfig (validated rule variables), RulesDocument
+└── Tooling/             # CostVectorFixture, CostVectorGenerator - golden-vector regression testing
+```
+
+- Base move legality comes from the `Chess` (Gera.Chess) NuGet package (`ChessBoard.LoadFromFen`, auto-detecting insufficient-material and fifty-move-rule endgames). **KiriChess's own layer is the clock economy on top** - captures, tolls, check chips, and repetition - not move generation itself. Threefold repetition is handled by KiriChess, not the underlying board: `GamePosition` carries its own position-occurrence-count history because the board is rebuilt fresh per move.
+- `GamePosition` is immutable. `KiriChessEngine.Apply` is the one operation that matters: position + move in, new position (or an error) out. Never mutate a `GamePosition` in place; if you need "apply then inspect," you're holding the returned value, not fixing the input.
+
+## The rules are config-driven, not hard-coded
+
+**[docs/RULES.md](../../docs/RULES.md) is itself a generated file** - its own header says so. Every number is generated from `config/kirichess.rules.json`, which `KiriChessConfig` loads and validates at runtime. The wording is the English `/rules` page (`ui/messages/en.json`); the generator only lays that page out as Markdown. The four rules (capture-is-time, movement toll, check chip, repetition guard) and every tunable (piece values, capture multiplier, move-cost mode, check chip amounts, promotion cost) live in that one JSON document.
+
+- **Changing a game rule means editing `config/kirichess.rules.json`**, not hand-editing a constant inside `KiriChessEngine.cs` or `Core/`. The engine, the UI's client-side economy mirror (`ui/lib/costPreview.ts`), and `docs/RULES.md` are three independent consumers of the same source - editing only one creates exactly the drift this file layout exists to prevent.
+- **Changing what the manual says means editing the English `/rules` page.** That page is the source of truth for the wording. `docs/RULES.md` follows it.
+- After changing the config or the English rules page, regenerate: `npm --prefix ui run gen:rules` (and check with `npm --prefix ui run gen:rules:check`, which CI gates on).
+- `KiriChessConfig.Validate()` runs on every `NewGame`/`FromFen` call - a rule change that produces an invalid config fails loudly at game creation, not silently at some later move.
+
+## Determinism
+
+Engine methods must be pure and deterministic - no wall-clock reads, no randomness, no I/O inside `KiriChess.Engine`. Time effects (tolls, chips, captures) are **computed from the move and the config**, never measured from a real clock; the server layer (`Games/IGameClock.cs`, see `realtime.mdc`) is where actual elapsed time gets charged against a position's clock. If you find yourself wanting `DateTime.Now` inside the engine, the deduction belongs at the server layer instead.
+
+## Testing convention - cost-vector fixtures, not just unit tests
+
+`Tooling/CostVectorFixture.cs` and `CostVectorGenerator.cs` define golden JSON test vectors (`VectorJson`: a FEN, a move, an economy config, and the expected clock effect) shared in shape with the server's `EconomyDto` and `ui/lib/costPreview.ts`'s `CostPreviewResult` - the same vector format proves the engine, the server DTO, and the client preview agree.
+
+**A new or changed rule variable needs a fixture entry, not just a C# unit test.** A unit test only proves the engine agrees with itself; a cost-vector fixture is what keeps the engine, `docs/RULES.md`'s worked examples, and the UI's client-side preview from silently diverging.
+
+## Testing convention - generative invariants
+
+`tests/KiriChess.Engine.Tests/Generative/` is the other shape of engine test: properties that must hold of every legal game, not just the cases somebody thought of.
+
+- `SelfPlay.cs` is the shared driver. It sorts `LegalMoves` by UCI before a seeded RNG indexes the list, because Gera.Chess parallelises generation and the order is not stable between runs (`EngineThroughputTests` pins that). Without the sort a seed names a different game every time and no failure is reproducible. `SelfPlay.SeedFor` also cannot use `HashCode.Combine` or `string.GetHashCode` - both are randomized per process.
+- `PerftTests` is the one external check on move generation. The numbers are published (or, for position 6, cross-validated against `python-chess`); if one of them fails, the engine changed - do not edit the constant.
+- Default runs stay inside a few seconds. Long exploration is opt-in: `KIRICHESS_ENGINE_SOAK=1` (multiplier 25, or `KIRICHESS_ENGINE_SOAK_FACTOR`).
+
+## Verify
+
+```bash
+dotnet test KiriChess.slnx --filter "FullyQualifiedName~Engine|FullyQualifiedName~CostVector"
+npm --prefix ui run gen:rules:check
+```

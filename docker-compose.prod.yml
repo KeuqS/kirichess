@@ -1,0 +1,126 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: kirichess-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: kirichess
+    volumes:
+      - kirichess-data:/var/lib/postgresql/data
+    # No published port: the DB must not be reachable from the host network in production.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kirichess"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # No published port: nothing outside the compose network may reach it. No persistence either,
+  # every key this app writes is derived, ephemeral or rebuildable from Postgres (see
+  # Phase 8.4). A flushed Redis costs a re-warm, never a game.
+  #
+  # I-2-13: the actual Fly deployment has never provisioned Redis (RedisOptions.Enabled gates
+  # everything past three always-safe singletons, see .claude/rules/backend.md) - this service
+  # exists so the Phase 8.4 multi-instance path (SignalR backplane, distributed game ownership) can
+  # be exercised locally, not because production needs it. `backend` below does not `depends_on`
+  # this service for exactly that reason: deleting `redis` (or leaving `Redis__Configuration` unset,
+  # the production shape) must not require also editing `backend`.
+  redis:
+    image: redis:7-alpine
+    container_name: kirichess-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Migration is a deliberate step, not part of `up`: run explicitly with
+  # `docker compose -f docker-compose.prod.yml --profile migrate run --rm migrate`.
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: kirichess-migrate
+    command: ["--migrate"]
+    # `required: false` so `docker compose config` still parses on a machine with no .env yet
+    # (e.g. CI validation); real deploys always supply one.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+    profiles: ["migrate"]
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: kirichess-backend
+    # `required: false` so `docker compose config` still parses on a machine with no .env yet
+    # (e.g. CI validation); real deploys always supply one.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - RunMigrationsOnStartup=false
+      # Phase 6d: both optional. Empty Sentry__Dsn means the SDK is never registered; empty
+      # Metrics__ScrapeToken means /metrics 404s. There is no port isolation under compose (unlike
+      # Fly's private [metrics] port), so the token is the only gate available here.
+      - Sentry__Dsn=${Sentry__Dsn:-}
+      - Metrics__ScrapeToken=${Metrics__ScrapeToken:-}
+      # Phase 8.4: also optional. Empty means single-instance, no backplane, no cross-instance
+      # ownership, no shared presence.
+      - Redis__Configuration=${Redis__Configuration:-}
+      # Phase 11b.1 follow-up: also optional. Empty means push is never attempted.
+      - Vapid__PublicKey=${Vapid__PublicKey:-}
+      - Vapid__PrivateKey=${Vapid__PrivateKey:-}
+      - Vapid__Subject=${Vapid__Subject:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      # I-2-13: not a dependency. Redis is optional at runtime (Redis__Configuration empty above is
+      # the production shape), so backend must start whether or not the redis service even exists in
+      # this file. StackExchange.Redis reconnects on its own if backend happens to start before
+      # redis is ready, so the local Phase 8.4 exercise does not need strict ordering either.
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+      args:
+        # I-2-6: fly.ui.toml's [build.args] passes four build args; this file only carries the two
+        # below. A self-hoster who wants the same frontend production builds (Sentry client
+        # reporting, the Turnstile widget on /login's register tab) must also pass
+        # NEXT_PUBLIC_SENTRY_DSN and NEXT_PUBLIC_TURNSTILE_SITE_KEY as additional build args.
+        # Omitting them is not an error: the app runs with no Sentry reporting and no Turnstile
+        # widget, the same fail-closed-to-usable shape as the rest.
+        #
+        # Defaulted like Sentry__Dsn/Metrics__ScrapeToken above, for the same reason the env_file is
+        # `required: false`: this file must resolve without a .env (CI validation, and the 9b.2 E2E
+        # overlay, which supplies the value itself). Without the `:-` every compose invocation warns.
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-}
+        # Same defaulting reason as NEXT_PUBLIC_API_BASE above. Unlike it, an empty value here isn't
+        # just "wrong" but would crash `new URL()` in layout.tsx/sitemap.ts/robots.ts (Phase 9d.6),
+        # those all fall back to http://localhost:3000 with `||`, not `??`, specifically so this
+        # empty-string default (not merely unset) still resolves to something valid.
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-}
+    container_name: kirichess-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  kirichess-data:

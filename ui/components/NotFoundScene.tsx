@@ -1,0 +1,109 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { MiniBoard } from "@/components/MiniBoard";
+import { BOARD_DARK_SQUARE } from "@/lib/boardTheme";
+
+/**
+ * Starting position without Black's g-knight. That knight is the one leaping
+ * to i9 - a legal knight vector (two files, one rank) that is not a square.
+ */
+export const NOT_FOUND_FEN =
+  "rnbqkb1r/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+/**
+ * Black knight from the Wikipedia / Cburnett set (CC BY-SA 3.0), the same
+ * drawing `react-chessboard` ships on the live board.
+ */
+function BoardKnight({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 45 45"
+      className={className}
+      aria-hidden="true"
+    >
+      <g
+        fill="none"
+        fillRule="evenodd"
+        stroke="#000"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path
+          d="M 22,10 C 32.5,11 38.5,18 38,39 L 15,39 C 15,30 25,32.5 23,18"
+          fill="#000"
+          stroke="#000"
+        />
+        <path
+          d="M 24,18 C 24.38,20.91 18.45,25.37 16,27 C 13,29 13.18,31.34 11,31 C 9.958,30.06 12.41,27.96 11,28 C 10,28 11.19,29.23 10,30 C 9,30 5.997,31 6,26 C 6,24 12,14 12,14 C 12,14 13.89,12.1 14,10.5 C 13.27,9.506 13.5,8.5 13.5,7.5 C 14.5,6.5 16.5,10 16.5,10 L 18.5,10 C 18.5,10 19.28,8.008 21,7 C 22,7 22,10 22,10"
+          fill="#000"
+          stroke="#000"
+        />
+        <path
+          d="M 9.5 25.5 A 0.5 0.5 0 1 1 8.5,25.5 A 0.5 0.5 0 1 1 9.5 25.5 z"
+          fill="#fff"
+          stroke="#fff"
+        />
+        <path
+          d="M 15 15.5 A 0.5 1.5 0 1 1 14,15.5 A 0.5 1.5 0 1 1 15 15.5 z"
+          transform="matrix(0.866,0.5,-0.5,0.866,9.693,-5.173)"
+          fill="#fff"
+          stroke="#fff"
+        />
+        <path
+          d="M 24.55,10.4 L 24.1,11.85 L 24.6,12 C 27.75,13 30.25,14.49 32.5,18.75 C 34.75,23.01 35.75,29.06 35.25,39 L 35.2,39.5 L 37.45,39.5 L 37.5,39 C 38,28.94 36.62,22.15 34.25,17.66 C 31.88,13.17 28.46,11.02 25.06,10.5 L 24.55,10.4 z"
+          fill="#fff"
+          stroke="none"
+        />
+      </g>
+    </svg>
+  );
+}
+
+/**
+ * Decorative 404 board. Hidden from AT on purpose: the page heading carries the
+ * joke, and a 64-cell grid plus an off-board knight would be noise.
+ *
+ * Laid out as a 10×10 file/rank grid (gutter files and ranks around the 8×8) so
+ * the leaping knight sits on g8 and lands on i9, the same size as every other
+ * square, instead of being absolutely pinned to the board's corner.
+ *
+ * P-7-1: MiniBoard (64 divs) rather than react-chessboard, which this page never
+ * needed to drag.
+ */
+export function NotFoundScene() {
+  const [leaping, setLeaping] = useState(false);
+
+  useEffect(() => {
+    const id = window.setTimeout(() => setLeaping(true), 1000);
+    return () => window.clearTimeout(id);
+  }, []);
+
+  return (
+    <div aria-hidden="true" className="w-full">
+      <div className="mb-1 grid h-5 grid-cols-10">
+        <span
+          className={`not-found-square-label col-start-10 self-end text-center text-xs font-semibold tracking-widest text-muted ${leaping ? "is-leaping" : ""}`}
+        >
+          i9?
+        </span>
+      </div>
+      <div className="relative grid aspect-square w-full grid-cols-10 grid-rows-10">
+        <div
+          className="col-start-10 row-start-1 border border-dashed border-[var(--border)]"
+          style={{ backgroundColor: BOARD_DARK_SQUARE }}
+        />
+        <div className="col-span-8 col-start-2 row-span-8 row-start-2 min-h-0 min-w-0 overflow-hidden">
+          <MiniBoard fen={NOT_FOUND_FEN} />
+        </div>
+        <div
+          className={`not-found-knight pointer-events-none z-10 col-start-8 row-start-2 ${leaping ? "is-leaping" : ""}`}
+        >
+          <BoardKnight className="block h-full w-full" />
+        </div>
+      </div>
+    </div>
+  );
+}

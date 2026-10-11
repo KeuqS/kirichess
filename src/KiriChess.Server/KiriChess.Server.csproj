@@ -1,0 +1,84 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UserSecretsId>001b1882-a438-4fbc-9320-b5f9e611319e</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.Google" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.11" />
+    <!-- Direct override: ensure a patched Microsoft.OpenApi version is used
+         (GHSA-v5pm-xwqc-g5wc is fixed in 2.7.5+). Pinned to the latest 2.x (2.12.0), not 3.x:
+         Microsoft.AspNetCore.OpenApi 10.0.11's own source generator and MultiShapeResponseTransformer
+         are both written against the 2.x API, where IOpenApiMediaType.Example/Schema are settable;
+         3.x made them read-only (init-only), which fails the build with CS0200 the moment 3.x actually
+         resolves - confirmed empirically 2026-08-19, not assumed. Re-check this pin whenever
+         Microsoft.AspNetCore.OpenApi bumps to a version built against Microsoft.OpenApi 3.x. -->
+    <PackageReference Include="Microsoft.OpenApi" Version="2.12.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.11">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+    <PackageReference Include="Stripe.net" Version="52.3.0" />
+    <!-- Phase 11b.1 follow-up: web push. The canonical web-push-libs/web-push-csharp port, targets
+         net8.0+/netstandard2.1/net48 so it runs fine on net10.0. -->
+    <PackageReference Include="WebPush" Version="1.0.13" />
+  </ItemGroup>
+
+  <!-- Multi-instance scale (Phase 8.4). All three are inert unless Redis:Configuration is set:
+       the backplane and the key ring are only registered when it is, and the connection itself is
+       lazy. A deploy that never sets it pays one package restore and nothing else. -->
+  <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" Version="3.1.13" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.StackExchangeRedis" Version="10.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.StackExchangeRedis" Version="10.0.11" />
+  </ItemGroup>
+
+  <!-- Observability (Phase 6d). The Prometheus exporter has no stable release, beta is the only
+       channel OpenTelemetry .NET publishes it on, and it is version-locked to the SDK.
+
+       Held at 1.16.0 rather than 1.17.0 deliberately: Windows Smart App Control refuses to load
+       OpenTelemetry.dll 1.17.0 ("An Application Control policy has blocked this file", 0x800711C7),
+       which takes down `dotnet run` and 19 tests on the dev machine. SAC is reputation-based, not a
+       verdict on the package, so newer versions clear once they age, but do not bump these blind:
+       run the full test suite on Windows afterwards, because the failure looks like 19 unrelated
+       host-boot failures rather than anything pointing at a package version. -->
+  <ItemGroup>
+    <PackageReference Include="OpenTelemetry.Extensions.Hosting" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.AspNetCore" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Instrumentation.Runtime" Version="1.16.0" />
+    <PackageReference Include="OpenTelemetry.Exporter.Prometheus.AspNetCore" Version="1.16.0-beta.1" />
+    <!-- Traces (Phase 9e.7). Pinned to 1.16.0 for the same reason as the sibling OpenTelemetry
+         packages above: it is the floor Sentry.OpenTelemetry.Exporter 6.8.0 declares, and letting it
+         float would pull a different core OpenTelemetry.dll than the 1.16.0 the SAC pin above holds
+         everything else at. -->
+    <PackageReference Include="OpenTelemetry.Exporter.OpenTelemetryProtocol" Version="1.16.0" />
+    <PackageReference Include="Sentry.AspNetCore" Version="6.8.0" />
+    <PackageReference Include="Sentry.OpenTelemetry.Exporter" Version="6.8.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\KiriChess.Engine\KiriChess.Engine.csproj" />
+  </ItemGroup>
+
+  <!-- Phase 8a.4: the moderation blocklist, embedded for exactly the reason the engine embeds
+       config/kirichess.rules.json - Dockerfile.backend copies src/ and the build output, never
+       config/, so a runtime file read would be a production-only NullReferenceException. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\config\kirichess.moderation.json" LogicalName="KiriChess.Server.kirichess.moderation.json" />
+  </ItemGroup>
+
+  <!-- Phase 6e.1: lets RateLimitingTests exercise HubRateLimitFilter's bucket arithmetic
+       (TryAcquire) directly rather than constructing a full HubInvocationContext. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="KiriChess.Server.Tests" />
+  </ItemGroup>
+
+</Project>

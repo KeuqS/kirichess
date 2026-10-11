@@ -1,0 +1,135 @@
+{
+  "Label": "A-cpu1-mem512-n50",
+  "TargetGames": 50,
+  "Pool": "sundial",
+  "ThinkMs": 3000,
+  "JitterMs": 1000,
+  "WarmupSeconds": 90,
+  "WindowSeconds": 180,
+  "Presence": true,
+  "Seed": 20260808,
+  "StartedAtUtc": "2026-08-08T21:52:10.2111695+00:00",
+  "WindowOpenedAtUtc": "2026-08-08T21:53:48.591761+00:00",
+  "WindowClosedAtUtc": "2026-08-08T21:56:48.8024064+00:00",
+  "PairingConverged": true,
+  "ObservedLiveGamesAtQueueGate": 50,
+  "MovesAppliedDelta": 2995,
+  "GamesStartedDelta": 2,
+  "GamesEndedDelta": 2,
+  "HubErrorsDelta": 0,
+  "RateLimitRejectedHubDelta": 0,
+  "RateLimitRejectedHttpDelta": 0,
+  "SnapshotFailuresDelta": 0,
+  "FlagFallDetectedDelta": 0,
+  "MoveApplyDuration": {
+    "Count": 2995,
+    "MeanMs": 0.39728711185308824,
+    "P50Ms": 5,
+    "P95Ms": 5,
+    "P99Ms": 5
+  },
+  "FlagFallSweepDuration": {
+    "Count": 180,
+    "MeanMs": 0.033235555555555574,
+    "P50Ms": 5,
+    "P95Ms": 5,
+    "P99Ms": 5
+  },
+  "GamesLive": {
+    "Min": 49,
+    "Mean": 49.97222222222222,
+    "Max": 50,
+    "FirstThirdMean": 50,
+    "LastThirdMean": 50,
+    "Samples": 36
+  },
+  "PendingSnapshots": {
+    "Min": 0,
+    "Mean": 0,
+    "Max": 0,
+    "FirstThirdMean": 0,
+    "LastThirdMean": 0,
+    "Samples": 36
+  },
+  "QueueDepth": {
+    "Min": 0,
+    "Mean": 0,
+    "Max": 0,
+    "FirstThirdMean": 0,
+    "LastThirdMean": 0,
+    "Samples": 36
+  },
+  "OnlineUsers": {
+    "Min": 100,
+    "Mean": 100,
+    "Max": 100,
+    "FirstThirdMean": 100,
+    "LastThirdMean": 100,
+    "Samples": 36
+  },
+  "ClientMovesSubmitted": 2995,
+  "ClientMovesReceived": 2995,
+  "ClientLatencyMeanMs": 1.9640657429048411,
+  "ClientLatencyP50Ms": 1.789,
+  "ClientLatencyP95Ms": 3.4535,
+  "ClientLatencyP99Ms": 4.6603,
+  "PingsAnswered": 5398,
+  "ReconnectsOrCloses": 0,
+  "ClientErrorsByCategory": {},
+  "Containers": [
+    {
+      "Container": "kirichess-backend",
+      "CpuMeanPercent": 8.220555555555555,
+      "CpuMaxPercent": 54.12,
+      "MemMaxBytes": 177419059.2,
+      "Samples": 36
+    },
+    {
+      "Container": "kirichess-db",
+      "CpuMeanPercent": 3.306111111111111,
+      "CpuMaxPercent": 8.65,
+      "MemMaxBytes": 278501785.6,
+      "Samples": 36
+    }
+  ],
+  "PlannedMovesPerSecond": 16.666666666666668,
+  "AchievedMovesPerSecond": 16.63888888888889,
+  "AchievedFractionOfPlanned": 0.9983333333333333,
+  "HarnessCpuMeanPercentOfHost": 0.09350104462693673,
+  "HarnessCpuMaxPercentOfHost": 0.2421876390157048,
+  "LoadCpus": "1.0",
+  "LoadMemory": "512m",
+  "Criteria": [
+    {
+      "Name": "flagfall-sweep-p99",
+      "Verdict": "Pass",
+      "Detail": "p99\u003C=5ms (warn\u003E=250, fail\u003E=1000)"
+    },
+    {
+      "Name": "move-latency",
+      "Verdict": "Pass",
+      "Detail": "p95=3ms p99=5ms (pass: p95\u003C250 \u0026 p99\u003C1000)"
+    },
+    {
+      "Name": "snapshot-backlog",
+      "Verdict": "Pass",
+      "Detail": "max=0.0 stayed under threshold 5.0"
+    },
+    {
+      "Name": "correctness",
+      "Verdict": "Pass",
+      "Detail": "hub.errors=0 ratelimit.rejected(hub)=0 snapshot_failures=0"
+    },
+    {
+      "Name": "backend-cpu-headroom",
+      "Verdict": "Pass",
+      "Detail": "mean=8% max=54% of pinned budget (fail\u003E=80% mean)"
+    },
+    {
+      "Name": "generator-honesty",
+      "Verdict": "Pass",
+      "Detail": "achieved=100% of planned (need\u003E=90%), driver cpu max=0% of host (need\u003C70%)"
+    }
+  ],
+  "Overall": "Pass"
+}

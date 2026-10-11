@@ -1,0 +1,247 @@
+{
+  "$comment": [
+    "THE single source of truth for every KiriChess rule variable.",
+    "",
+    "The engine reads this file (embedded into KiriChess.Engine at build time) and the web UI is",
+    "generated from it (`npm run gen:rules` -> ui/lib/rules.generated.ts). Nothing else may hardcode",
+    "a rule number: the rules page, the custom-game builder, the docs and the engine presets are all",
+    "downstream of this document. CI fails if any copy drifts.",
+    "",
+    "Edit here, then run `npm --prefix ui run gen:rules` to refresh the generated TypeScript and",
+    "docs/RULES.md.",
+    "",
+    "POOL IDENTITY vs POOL NAME. Each pool carries two strings and they are not interchangeable:",
+    "  `key`   the frozen storage id. It is written into Games.RatingPool, Ratings.Pool,",
+    "          RatingHistory.Pool and Challenge.Pool, it forms the Redis matchmaking queue keys and",
+    "          the `bot:{key}` rating namespace, and it is the `preset` value the public API accepts.",
+    "          Renaming a key orphans every historical rating row, so treat these six as permanent",
+    "          identifiers with no display meaning, the way a database id has none.",
+    "  `label` the display name, and the ONLY place a pool's name is written. Change it here and it",
+    "          changes everywhere: nothing downstream may hardcode the word. PoolLabelDriftTests",
+    "          fails the build if a label literal reappears in ui/ outside the generated files.",
+    "",
+    "Licence: CC BY 4.0. Attribution: \"KiriChess\" by Michiel Gekiere.",
+    "https://creativecommons.org/licenses/by/4.0/"
+  ],
+  "schemaVersion": 2,
+  "edition": "Second Edition",
+
+  "defaults": {
+    "$comment": "Engine defaults, also the starting point for the custom-game builder.",
+    "startTimeSeconds": 180,
+    "baseIncrement": 0,
+    "economyScale": 1,
+    "pieceValues": {
+      "pawn": 1,
+      "knight": 2,
+      "bishop": 2,
+      "rook": 3,
+      "queen": 5
+    },
+    "captureMult": 5,
+    "captureCaptorGainEnabled": true,
+    "captureVictimLossEnabled": true,
+    "moveCostMode": "PerPiece",
+    "moveCostPerPiece": {
+      "pawn": 1,
+      "knight": 2,
+      "bishop": 2,
+      "rook": 3,
+      "queen": 4,
+      "king": 1
+    },
+    "castleCostFlat": 3,
+    "moveCostFlat": 1,
+    "moveCostPerSquare": 1,
+    "checkCheckerGain": 2,
+    "checkVictimLoss": 2,
+    "doubleCheckChipMultiplier": 2,
+    "promotionCostMult": 0,
+    "repeatedPositionNullifiesTime": true,
+    "threefoldRepetitionIsDraw": true,
+    "flagFallLoses": true,
+    "flagVsInsufficientMaterialIsDraw": true
+  },
+
+  "pools": [
+    {
+      "key": "bounty1",
+      "label": "Winder",
+      "rated": true,
+      "tagline": "The on-ramp.",
+      "overrides": {
+        "startTimeSeconds": 60,
+        "captureMult": 5,
+        "captureCaptorGainEnabled": true,
+        "captureVictimLossEnabled": false
+      },
+      "duration": {
+        "ceilingMinutes": 1.8,
+        "beginner": "1–1.5 min",
+        "intermediate": "1–2 min",
+        "advanced": "1–2.5 min",
+        "feelsLike": "1m bullet"
+      }
+    },
+    {
+      "key": "burn1",
+      "label": "Ratchet",
+      "rated": true,
+      "tagline": "No take-backs.",
+      "overrides": {
+        "startTimeSeconds": 240,
+        "captureMult": 5,
+        "captureCaptorGainEnabled": false,
+        "captureVictimLossEnabled": true
+      },
+      "duration": {
+        "ceilingMinutes": 2.8,
+        "beginner": "1–2 min",
+        "intermediate": "1.5–2.5 min",
+        "advanced": "2–2.8 min",
+        "feelsLike": "2m bullet"
+      }
+    },
+    {
+      "key": "steal2",
+      "label": "Fulcrum",
+      "rated": true,
+      "tagline": "Double stakes.",
+      "overrides": {
+        "startTimeSeconds": 300,
+        "captureMult": 10,
+        "captureCaptorGainEnabled": true,
+        "captureVictimLossEnabled": true
+      },
+      "duration": {
+        "ceilingMinutes": 7.3,
+        "beginner": "2–3 min",
+        "intermediate": "3–5 min",
+        "advanced": "4–7 min",
+        "feelsLike": "3m blitz"
+      }
+    },
+    {
+      "key": "steal1",
+      "label": "Anchor",
+      "rated": true,
+      "tagline": "The rated default.",
+      "overrides": {
+        "startTimeSeconds": 360,
+        "captureMult": 5,
+        "captureCaptorGainEnabled": true,
+        "captureVictimLossEnabled": true
+      },
+      "duration": {
+        "ceilingMinutes": 9.3,
+        "beginner": "4–7 min",
+        "intermediate": "6–9 min",
+        "advanced": "8–10 min",
+        "feelsLike": "5m blitz"
+      }
+    },
+    {
+      "key": "burn2",
+      "label": "Mainspring",
+      "rated": true,
+      "tagline": "Every trade bleeds.",
+      "overrides": {
+        "startTimeSeconds": 900,
+        "captureMult": 10,
+        "captureCaptorGainEnabled": false,
+        "captureVictimLossEnabled": true
+      },
+      "duration": {
+        "ceilingMinutes": 22,
+        "beginner": "9–13 min",
+        "intermediate": "13–17 min",
+        "advanced": "16–21 min",
+        "feelsLike": "10m rapid"
+      }
+    },
+    {
+      "key": "steal3",
+      "label": "Eclipse",
+      "rated": true,
+      "tagline": "Room to think.",
+      "overrides": {
+        "startTimeSeconds": 900,
+        "captureMult": 20,
+        "captureCaptorGainEnabled": true,
+        "captureVictimLossEnabled": true
+      },
+      "duration": {
+        "ceilingMinutes": 27,
+        "beginner": "10–15 min",
+        "intermediate": "14–20 min",
+        "advanced": "18–26 min",
+        "feelsLike": "15m rapid"
+      }
+    }
+  ],
+
+  "docModel": {
+    "$comment": [
+      "Playtesting-derived constants used to compute the explanatory tables on the rules page and in",
+      "docs/RULES.md. These are modelling assumptions, not engine rules, the engine never reads this",
+      "block. They exist here so the published tables recompute themselves when a rule number changes,",
+      "instead of going quietly stale."
+    ],
+    "movesPerPlayer": 40,
+    "moveFrequency": {
+      "$comment": "Share of a player's moves made by each piece, from playtested games. Must sum to 1.",
+      "pawn": 0.3,
+      "knight": 0.14,
+      "bishop": 0.14,
+      "rook": 0.19,
+      "queen": 0.12,
+      "king": 0.11
+    },
+    "materialTradedPoints": {
+      "$comment": "Piece-value points each player loses to captures in a typical game; drives the Burn/Bounty drain estimate.",
+      "value": 15
+    },
+    "endgames": [
+      {
+        "name": "K+Q+R vs K",
+        "work": "Ladder, heavy pieces",
+        "mix": { "queen": 3, "rook": 3 }
+      },
+      {
+        "name": "K+2R vs K",
+        "work": "Pure rook ladder, king never moves",
+        "mix": { "rook": 8 }
+      },
+      {
+        "name": "K+Q vs K",
+        "work": "Queen boxes, king walks",
+        "mix": { "queen": 11, "king": 4 }
+      },
+      {
+        "name": "K+2B vs K",
+        "work": "Bishops herd, king supports",
+        "mix": { "bishop": 20, "king": 8 }
+      },
+      {
+        "name": "K+P vs K",
+        "work": "Escort the pawn, then the queen bill",
+        "mix": { "pawn": 6, "king": 8, "queen": 11 }
+      },
+      {
+        "name": "K+R vs K",
+        "work": "Rook boxes, king shoulders",
+        "mix": { "rook": 21, "king": 7 }
+      },
+      {
+        "name": "K+B+N vs K",
+        "work": "The hardest mate in chess",
+        "mix": { "bishop": 20, "knight": 18, "king": 12 }
+      },
+      {
+        "name": "K+Q vs K+R",
+        "work": "Queen-heavy grind",
+        "mix": { "queen": 25, "king": 5 }
+      }
+    ]
+  }
+}

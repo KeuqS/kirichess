@@ -1,0 +1,70 @@
+# Backend rules - `src/KiriChess.Server/`
+
+Applies to server, data, and infrastructure code.
+
+## Layout (feature-oriented, not Clean Architecture folders)
+
+```
+src/KiriChess.Server/
+├── {Feature}/           # e.g. Games/, Account/, Auth/, Moderation/
+│   ├── *Endpoints.cs    # minimal API route groups
+│   ├── *Service.cs      # business logic
+│   └── *Dtos.cs         # request/response records (often colocated)
+├── Data/
+│   ├── Entities/        # EF entities
+│   ├── Migrations/      # generated - do not hand-edit
+│   └── KiriChessDbContext.cs
+├── Infrastructure/      # cross-cutting: email, redis, openapi, push
+└── Program.cs           # DI registration + route wiring
+```
+
+Tests mirror features in `tests/KiriChess.Server.Tests/`.
+
+## Endpoints
+
+- Static class with `Map{Feature}Endpoints(this IEndpointRouteBuilder app)`
+- `MapGroup("/api/...")` with `.RequireAuthorization()` / rate limiting as appropriate
+- Thin handlers: parse → auth (`ClaimsPrincipal`, `GetUserId`) → service → `Results.*`
+- Use `.Produces<T>()` for OpenAPI - client codegen depends on it
+- Register in `Program.cs` alongside existing `Map*Endpoints()` calls
+
+## Services & data
+
+- Primary constructors, `CancellationToken` on async methods
+- Entities in `Data/Entities/`, `DbSet<>` on `KiriChessDbContext`
+- Business-rule failures: throw or return typed errors consistently with neighboring endpoints
+- Auth: parse user id with `Guid.TryParse` on `ClaimTypes.NameIdentifier`
+
+## Redis & caching
+
+Redis backs the SignalR backplane, distributed live-game ownership (see [realtime.md](realtime.md)), rate limiting, and the Data Protection key ring - registered via [Infrastructure/Redis/RedisRegistration.cs](../../src/KiriChess.Server/Infrastructure/Redis/RedisRegistration.cs). It is **optional at runtime**: `RedisOptions.Enabled` gates everything beyond three always-safe singletons, so a new Redis-backed feature must degrade harmlessly (not throw) when Redis isn't configured - follow the existing pattern of checking `options.Enabled` rather than assuming a connection exists.
+
+- **Key namespacing**: every key/channel is prefixed with `RedisOptions.KeyPrefix` (e.g. `{prefix}dataprotection-keys`, `{prefix}signalr` channel). A shared Redis instance - or a staging and production app pointed at the same one by accident - must not cross-deliver data between deployments; any new Redis key needs the same prefix, not a bare literal.
+- **TTLs**: anything cached (leaderboards, presence, rate-limit counters) should have an explicit expiry - Redis is not a second system of record. `docs/decisions/RETENTION.md` §1 notes rate-limit counters live in memory/Redis for "the counting window only; never a table" - new cached data should follow the same shape.
+- Test pattern: [LeaderboardCacheTests.cs](../../tests/KiriChess.Server.Tests/LeaderboardCacheTests.cs) for anything cache-backed; [RedisFixture.cs](../../tests/KiriChess.Server.Tests/RedisFixture.cs) for integration tests needing a real Redis instance (see [testing.md](testing.md) - don't mock Redis where its actual semantics matter).
+
+## Migrations
+
+- Run from repo root: `dotnet ef migrations add <Name> --project src/KiriChess.Server`
+- Migrations live in `src/KiriChess.Server/Data/Migrations/`
+- **Do not** run `dotnet ef database update` without explicit user confirmation
+- Do not hand-edit `.Designer.cs` or `KiriChessDbContextModelSnapshot.cs`
+
+## OpenAPI export
+
+```bash
+dotnet run --project src/KiriChess.Server -- --export-openapi docs/api/openapi.json
+```
+
+Then refresh the UI client (`cd ui && npm run gen:api`).
+
+## Verify
+
+```bash
+dotnet test KiriChess.slnx
+dotnet build src/KiriChess.Server
+```
+
+## Templates
+
+Good endpoint references: `Games/ChallengeEndpoints.cs`, `Account/AccountEndpoints.cs`.

@@ -1,0 +1,35 @@
+ui/public/stockfish-19-lite-single.js and ui/public/stockfish-19-lite-single.wasm
+are NOT licensed under Apache-2.0.
+
+They are a single-threaded WebAssembly build of Stockfish 19 Lite, released
+under the GNU General Public License v3.
+
+  Stockfish copyright T. Romstad, M. Costalba, J. Kiiski, G. Linscott
+  and other contributors.
+    https://github.com/official-stockfish/Stockfish
+  Lite network nn-61e7af4bb97d by Chris Bao (sscg13).
+  Compiled to JavaScript and WebAssembly by Nathan Rugg (Chess.com, LLC):
+    https://github.com/nmrugg/stockfish.js
+
+KiriChess loads the .js file as a same-origin Web Worker (ui/lib/bot.ts).
+The worker fetches the sibling .wasm. They remain a separate program. You
+cannot relicense them as Apache-2.0.
+
+This build is the published release v19.0.0 (2026-09-15):
+  https://github.com/nmrugg/stockfish.js/releases/tag/v19.0.0
+  Stockfish commit edb0d9db6731067ec50ce619ff372b463bc4dd5d
+  Lite nets: official-stockfish/Stockfish compare master...sscg13:f5e5c633dd0c9c0efd1d1266f441ea5929b043c1
+
+  stockfish-19-lite-single.js, 21,415 bytes,
+  sha256 d3344124ab067fb0b90ee77873bb8e9fbf5fc01bc525fe714b0f942581e889e6.
+
+  stockfish-19-lite-single.wasm, 1,787,571 bytes,
+  sha256 57ac2d72312aba346760e3f173f687a8c211208e97a87268436f7f0e10bb5387.
+
+Those sizes and hashes are the release asset digests. The engine is
+single-threaded (no SharedArrayBuffer), so it does not need cross-origin
+isolation. It is the lite net, not the ~99 MB full net.
+
+Full licence text, vendored alongside this binary: /GPL-3.0.txt
+GNU GPL v3 (canonical source): https://www.gnu.org/licenses/gpl-3.0.html
+SPDX-License-Identifier: GPL-3.0-only

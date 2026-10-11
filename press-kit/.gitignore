@@ -1,0 +1,4 @@
+# Raw capture output; regenerate with e2e/press-kit/capture.spec.ts and convert.mjs.
+clip/*.webm
+clip/*.mp4
+clip/*.gif

@@ -1,0 +1,59 @@
+# Phase 10c.3: pinned by digest, not just tag - see Dockerfile.backend's identical comment.
+# Dependabot's docker ecosystem (.github/dependabot.yml) bumps the digest as the tag moves.
+FROM node:26-alpine@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS deps
+WORKDIR /app
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+
+FROM node:26-alpine@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY ui/ ./
+
+# Next inlines NEXT_PUBLIC_* at build time, so the API origin has to be known here, not at runtime.
+ARG NEXT_PUBLIC_API_BASE=http://localhost:5053
+ENV NEXT_PUBLIC_API_BASE=$NEXT_PUBLIC_API_BASE
+
+# Canonical site origin for robots.txt/sitemap.xml/openGraph absolute URLs (Phase 9d.6). Same
+# build-time inlining as above.
+ARG NEXT_PUBLIC_SITE_URL=http://localhost:3000
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
+
+# Also inlined at build time, so the DSN is a build arg like the API origin. Empty by default:
+# an unconfigured image initialises no SDK at all.
+ARG NEXT_PUBLIC_SENTRY_DSN=
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+
+# DH.3. Same build-time inlining; empty by default so an unconfigured image renders no widget and
+# register stays usable (ui/lib/turnstile.ts). The site key is public by design. The widget's
+# secret key is a Fly secret on the API (Turnstile__SecretKey), never a frontend build arg.
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY=
+ENV NEXT_PUBLIC_TURNSTILE_SITE_KEY=$NEXT_PUBLIC_TURNSTILE_SITE_KEY
+
+# DH.5. Same build-time inlining; empty/false by default so an unconfigured image hides the Google
+# button (ui/app/[locale]/login/page.tsx). API secrets alone do not show the button.
+ARG NEXT_PUBLIC_GOOGLE_SIGN_IN=
+ENV NEXT_PUBLIC_GOOGLE_SIGN_IN=$NEXT_PUBLIC_GOOGLE_SIGN_IN
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+FROM node:26-alpine@sha256:0b36e8c136b94cd4fcf02188228e76c31ad5872eef3fec8cbd2eee500cfd9e80 AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# `output: "standalone"` (ui/next.config.ts) emits a self-contained server.js plus a trimmed node_modules.
+COPY --from=builder --chown=node:node /app/public ./public
+COPY --from=builder --chown=node:node /app/.next/standalone ./
+COPY --from=builder --chown=node:node /app/.next/static ./.next/static
+
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+USER node
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD wget -q --spider http://localhost:3000/ || exit 1
+
+CMD ["node", "server.js"]

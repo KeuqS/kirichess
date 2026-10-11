@@ -1,0 +1,69 @@
+name: Off-site backup
+
+# ROADMAP 10c.1: a copy of production that still exists if Neon is the thing that failed.
+#
+# Everything this does is in scripts/offsite-backup.sh, deliberately: the weekly dump and the
+# disaster restore (`bash scripts/offsite-backup.sh restore`) cannot drift into testing different
+# objects. The script branches Neon, dumps the throwaway branch (unpooled), puts the dump in
+# Cloudflare R2, then restores *the R2 object* into a local Postgres and runs restore-drill.sh's
+# schema / boot / replay assertions against it. The restore target is not Neon.
+#
+# This touches production only by *reading* it. The dump branch is deleted on the way out.
+
+on:
+  # github-dpa-before-schedule: the Sunday 05:41 UTC cron stays off until GitHub's DPA is
+  # accepted and recorded in docs/legal/DPA-CHECKLIST.md. A run materialises a production dump
+  # on a GitHub-hosted runner. workflow_dispatch is how that run happens after the acceptance,
+  # and not before. Put the schedule back in the same change that records the acceptance:
+  #   schedule:
+  #     - cron: "41 5 * * 0"
+  workflow_dispatch:
+
+# Serialize with restore-drill.yml: both create a compute endpoint on the same Neon project, and
+# a failed cleanup on either leaks one.
+concurrency:
+  group: neon-branch-jobs
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Phase 10c.2: pinned to the commit each tag currently resolves to, not the mutable tag
+      # itself - see ci.yml's matching comment for why. Dependabot's github-actions ecosystem
+      # entry bumps the SHA (and this comment) the same way it bumps a semver dependency.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Install AWS CLI
+        run: |
+          curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip
+          unzip -q /tmp/awscliv2.zip -d /tmp
+          sudo /tmp/aws/install --update
+          aws --version
+
+      - name: Dump to R2 and restore-verify locally
+        # `bash <path>`, not `./<path>`: this repo is authored on Windows and the executable bit is
+        # not reliably preserved in the index, which would fail here as a bare "Permission denied".
+        run: bash scripts/offsite-backup.sh
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID || 'plain-salad-47730828' }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          R2_JURISDICTION: ${{ vars.R2_JURISDICTION || 'eu' }}
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'kirichess-backups' }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::Off-site backup failed. Production is unaffected: this job only reads it."
+          echo "See docs/ops/DEPLOYMENT.md § 5.3 for setup (bucket, two secrets) and what a failure implies."

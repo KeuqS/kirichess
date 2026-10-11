@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars (gitignored) and fill in, or pass every value as a TF_VAR_ environment
+# variable instead so nothing sensitive ever touches a file on disk. Never commit terraform.tfvars.
+
+betteruptime_api_token = "" # Better Stack -> Uptime -> Team Settings -> API tokens
+telemetry_api_token    = "" # Better Stack -> Logs & Metrics -> Team Settings -> API tokens
+metrics_scrape_token   = "" # must equal the Metrics__ScrapeToken Fly secret - see DEPLOYMENT.md
+
+# Defaults target production (fly.backend.toml). For staging:
+# backend_base_url = "https://kirichess-api-staging.fly.dev"
+# environment       = "staging"
+# edge_api_url      = "https://kirichess-api-staging.fly.dev"
+# edge_site_url     = "https://kirichess-ui-staging.fly.dev"

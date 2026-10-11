@@ -1,0 +1,120 @@
+{
+  "Label": "B-innet-n1200",
+  "TargetGames": 1200,
+  "Pool": "sundial",
+  "ThinkMs": 3000,
+  "JitterMs": 1000,
+  "WarmupSeconds": 90,
+  "WindowSeconds": 180,
+  "Presence": true,
+  "Seed": 20260808,
+  "StartedAtUtc": "2026-08-08T22:55:18.1498884+00:00",
+  "WindowOpenedAtUtc": "2026-08-08T22:57:58.3101503+00:00",
+  "WindowClosedAtUtc": "2026-08-08T23:00:58.3319081+00:00",
+  "PairingConverged": true,
+  "ObservedLiveGamesAtQueueGate": 1200,
+  "MovesAppliedDelta": 71667,
+  "GamesStartedDelta": 30,
+  "GamesEndedDelta": 31,
+  "HubErrorsDelta": 0,
+  "RateLimitRejectedHubDelta": 0,
+  "RateLimitRejectedHttpDelta": 0,
+  "SnapshotFailuresDelta": 0,
+  "FlagFallDetectedDelta": 0,
+  "MoveApplyDuration": {
+    "Count": 71667,
+    "MeanMs": 0.5509030697531775,
+    "P50Ms": 5,
+    "P95Ms": 5,
+    "P99Ms": 5
+  },
+  "FlagFallSweepDuration": {
+    "Count": 180,
+    "MeanMs": 1.1949266666666662,
+    "P50Ms": 5,
+    "P95Ms": 5,
+    "P99Ms": 25
+  },
+  "GamesLive": {
+    "Min": 1198,
+    "Mean": 1199.8055555555557,
+    "Max": 1200,
+    "FirstThirdMean": 1199.6666666666667,
+    "LastThirdMean": 1199.75,
+    "Samples": 36
+  },
+  "PendingSnapshots": {
+    "Min": 569,
+    "Mean": 827.0277777777778,
+    "Max": 1094,
+    "FirstThirdMean": 845.9166666666666,
+    "LastThirdMean": 793,
+    "Samples": 36
+  },
+  "QueueDepth": {
+    "Min": 0,
+    "Mean": 0.027777777777777776,
+    "Max": 1,
+    "FirstThirdMean": 0,
+    "LastThirdMean": 0.08333333333333333,
+    "Samples": 36
+  },
+  "OnlineUsers": {
+    "Min": 2400,
+    "Mean": 2400,
+    "Max": 2400,
+    "FirstThirdMean": 2400,
+    "LastThirdMean": 2400,
+    "Samples": 36
+  },
+  "ClientMovesSubmitted": 71665,
+  "ClientMovesReceived": 71663,
+  "ClientLatencyMeanMs": 11.764546208294401,
+  "ClientLatencyP50Ms": 1.037199,
+  "ClientLatencyP95Ms": 38.574907,
+  "ClientLatencyP99Ms": 334.094896,
+  "PingsAnswered": 129568,
+  "ReconnectsOrCloses": 0,
+  "ClientErrorsByCategory": {},
+  "Containers": [],
+  "PlannedMovesPerSecond": 400,
+  "AchievedMovesPerSecond": 398.15,
+  "AchievedFractionOfPlanned": 0.9953749999999999,
+  "HarnessCpuMeanPercentOfHost": 3.266077293472412,
+  "HarnessCpuMaxPercentOfHost": 7.955607519549593,
+  "LoadCpus": "2.0",
+  "LoadMemory": "2g",
+  "Criteria": [
+    {
+      "Name": "flagfall-sweep-p99",
+      "Verdict": "Pass",
+      "Detail": "p99\u003C=25ms (warn\u003E=250, fail\u003E=1000)"
+    },
+    {
+      "Name": "move-latency",
+      "Verdict": "Pass",
+      "Detail": "p95=39ms p99=334ms (pass: p95\u003C250 \u0026 p99\u003C1000)"
+    },
+    {
+      "Name": "snapshot-backlog",
+      "Verdict": "Warn",
+      "Detail": "spiked to 1094.0 (threshold 120.0) but no sustained trend"
+    },
+    {
+      "Name": "correctness",
+      "Verdict": "Pass",
+      "Detail": "hub.errors=0 ratelimit.rejected(hub)=0 snapshot_failures=0"
+    },
+    {
+      "Name": "backend-cpu-headroom",
+      "Verdict": "Pass",
+      "Detail": "mean=0% max=0% of pinned budget (fail\u003E=80% mean)"
+    },
+    {
+      "Name": "generator-honesty",
+      "Verdict": "Pass",
+      "Detail": "achieved=100 % of planned (need\u003E=90%), driver cpu max=8% of host (need\u003C70%)"
+    }
+  ],
+  "Overall": "Warn"
+}

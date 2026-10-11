@@ -1,0 +1,6 @@
+@KiriChess.Server_HostAddress = http://localhost:5053
+
+GET {{KiriChess.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

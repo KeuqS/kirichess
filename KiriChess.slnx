@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Checker/Checker.csproj" />
+    <Project Path="src/KiriChess.Engine/KiriChess.Engine.csproj" />
+    <Project Path="src/KiriChess.Server/KiriChess.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/KiriChess.Engine.Tests/KiriChess.Engine.Tests.csproj" />
+    <Project Path="tests/KiriChess.Server.Tests/KiriChess.Server.Tests.csproj" />
+    <Project Path="tests/KiriChess.Simulator.Tests/KiriChess.Simulator.Tests.csproj" />
+  </Folder>
+  <Folder Name="/loadtest/">
+    <Project Path="loadtest/KiriChess.LoadTest/KiriChess.LoadTest.csproj" />
+  </Folder>
+  <Folder Name="/simulator/">
+    <Project Path="simulator/KiriChess.Simulator/KiriChess.Simulator.csproj" />
+  </Folder>
+</Solution>

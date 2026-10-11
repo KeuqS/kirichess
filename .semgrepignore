@@ -1,0 +1,13 @@
+# Semgrep skip list. Complements .gitignore (which `semgrep scan` already honours):
+# generated trees that a local working copy holds even when git does not, so a laptop
+# run and a CI checkout scan the same files. Do not add source paths here to silence
+# a finding - annotate the finding with `nosemgrep:` and a reason, the way
+# OpenApiExport.WriteAsync and the format-on-edit hook already do.
+node_modules/
+**/bin/
+**/obj/
+**/.next/
+coverage/
+TestResults/
+*.min.js
+.terraform/

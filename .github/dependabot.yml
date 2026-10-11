@@ -1,0 +1,63 @@
+version: 2
+updates:
+  # Backend (src/, tests/) - KiriChess.slnx at the repo root pulls in every project.
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Phase 10c.2: a newly published version can be malicious or simply unstable (a supply-chain
+    # window Semgrep's dependabot-missing-cooldown rule flags), so wait a week after publish before
+    # proposing it - same 7 days every ecosystem below now uses.
+    cooldown:
+      default-days: 7
+    groups:
+      nuget-minor-patch:
+        update-types: ["minor", "patch"]
+    ignore:
+      # Held at 1.16.0 deliberately: Windows Smart App Control blocks 1.17.0 on the dev
+      # machine (see the comment in src/KiriChess.Server/KiriChess.Server.csproj). Patch
+      # releases within 1.16.x are still allowed; only the 1.17.0 minor bump is blocked.
+      - dependency-name: "OpenTelemetry*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  # Frontend (ui/).
+  - package-ecosystem: "npm"
+    directory: "/ui"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      npm-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # E2E toolchain (e2e/) - separate package.json from ui/, so it needs its own entry or it gets
+  # no automated bump PRs and no supply-chain cooldown treatment at all (I-11-6).
+  - package-ecosystem: "npm"
+    directory: "/e2e"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    groups:
+      npm-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # The workflows themselves (actions/checkout, setup-dotnet, setup-node, ...).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+
+  # Phase 10c.3: the base images in Dockerfile.backend and Dockerfile.frontend are now pinned by
+  # digest for reproducibility, which would otherwise freeze them at today's OS packages forever.
+  # This is the half that keeps them moving: Dependabot resolves the tag each week and opens a PR
+  # bumping the digest when it has moved, same shape as the nuget/npm rows above.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7

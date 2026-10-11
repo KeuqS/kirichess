@@ -1,0 +1,128 @@
+KiriChess
+Copyright 2026 Michiel Gekiere
+
+This product includes software developed by Michiel Gekiere.
+Play the hosted service at https://kirichess.com
+The development repository is private. A clean public snapshot of the source,
+when published, is the place to read these licence files outside this tree.
+
+--------------------------------------------------------------------------------
+Licensing (read LICENSE for the Apache-2.0 legal text)
+--------------------------------------------------------------------------------
+
+Unless a path below says otherwise, this repository is licensed under the
+Apache License, Version 2.0. Apache-2.0 does not grant permission to use the
+trade names, trademarks, service marks, or product names of the Licensor
+except as required for reasonable and customary use in describing the origin
+of the Work (Apache-2.0 §6).
+
+The name "KiriChess", the wordmark, and the marks in press-kit/logo/ and
+ui/public/logo.svg are used as a brand. They are not licensed under Apache-2.0
+or CC BY 4.0. You may name the variant when attributing the rules text; you
+may not run a competing service, or distribute a fork, under the name
+KiriChess.
+
+A fork that renames itself and wants to credit the variant may use, without
+implying endorsement or affiliation: "Plays the KiriChess variant, invented by
+Michiel Gekiere, rules CC BY 4.0."
+
+--------------------------------------------------------------------------------
+Rules manual - Creative Commons Attribution 4.0 (CC BY 4.0)
+--------------------------------------------------------------------------------
+
+The following are licensed under CC BY 4.0, not Apache-2.0:
+
+  docs/RULES.md
+  config/kirichess.rules.json
+  ui/lib/rules.generated.ts (generated from config/kirichess.rules.json)
+  the "rules" and "learn" namespaces in ui/messages/*.json
+  the /rules and /learn pages on the KiriChess website
+
+You are free to share and adapt that material, including commercially, provided
+you give appropriate credit, link to the licence, and indicate if changes were
+made. Full licence: https://creativecommons.org/licenses/by/4.0/legalcode
+
+Required attribution, in this form or one substantially like it:
+
+  "KiriChess" by Michiel Gekiere, licensed under CC BY 4.0.
+  https://kirichess.com
+
+Game rules and mechanics are not copyrightable; CC BY 4.0 covers the wording
+of this manual, not a claim over the mechanic. See docs/game/CLAIMS.md.
+
+--------------------------------------------------------------------------------
+Vendored engine - GNU GPL-3.0 (not Apache-2.0)
+--------------------------------------------------------------------------------
+
+ui/public/stockfish-19-lite-single.js and
+ui/public/stockfish-19-lite-single.wasm are the Stockfish 19 Lite
+single-threaded WebAssembly build (T. Romstad, M. Costalba, J. Kiiski,
+G. Linscott and contributors; lite network by Chris Bao), compiled by
+Nathan Rugg / Chess.com (https://github.com/nmrugg/stockfish.js release
+v19.0.0). They are released under the GNU General Public License v3. The
+.js file is loaded as a separate Web Worker program (ui/lib/bot.ts) and is
+not relicensed. The full licence text is vendored at ui/public/GPL-3.0.txt,
+served alongside the binary; see ui/public/STOCKFISH.LICENSE for the release
+tag, upstream commit, and the size and sha256 of each file.
+
+--------------------------------------------------------------------------------
+Board sounds - Creative Commons Zero (CC0 1.0) and Apache License 2.0
+--------------------------------------------------------------------------------
+
+The board-move cues in ui/public/sounds/ (move, capture, castle, check,
+start) are built from the CC0 1.0 "Chess Puzzle Blitz SFX" pack by el_boss,
+recorded on a wooden board; they are CC0 1.0, not Apache-2.0. The outcome
+cues (win, loss, draw) are original synthesized phrases and are part of the
+Apache-2.0 work. Per-file mapping and the CC0 deed:
+ui/public/sounds/SOUNDS.LICENSE.
+
+--------------------------------------------------------------------------------
+Montserrat font - SIL Open Font License 1.1
+--------------------------------------------------------------------------------
+
+The site sets its type in Montserrat (designed by Julieta Ulanovsky, Sol
+Matas, Juan Pablo del Peral and Jacques Le Bailly), served self-hosted from
+the site's own origin via next/font/google (ui/app/[locale]/layout.tsx). It
+is licensed under the SIL Open Font License, Version 1.1, not Apache-2.0.
+Full licence: https://openfontlicense.org/documents/OFL.txt
+
+--------------------------------------------------------------------------------
+Third-party build and runtime dependencies with a non-Apache-2.0 licence
+--------------------------------------------------------------------------------
+
+These do not taint the codebase above and are recorded here rather than left
+for a scanner to find first:
+
+  @img/sharp-* (an optional dependency of Next.js's image handling) bundles
+  libvips, Apache-2.0 AND LGPL-3.0-or-later. The LGPL-3.0 half's obligations
+  (notice, and the ability to relink) attach on conveyance of the built
+  image. As of 2026-09-06 no workflow pushes the frontend image to any
+  registry, so nothing is conveyed today; see "Running your own instance" in
+  README.md if that ever changes.
+
+  lightningcss (a Tailwind CSS v4 build-time dependency) and axe-core /
+  @axe-core/playwright (e2e/ test-only) are MPL-2.0, file-level reciprocal,
+  and neither is modified or shipped.
+
+  WebPush 1.0.13 (.NET, server-side push notifications) is MPL-2.0 per its
+  upstream repository (github.com/web-push-libs/web-push-csharp/blob/master/LICENSE);
+  its own NuGet package metadata records only a deprecated licenseUrl. Used
+  unmodified.
+
+  @sentry/cli, pulled in transitively by @sentry/nextjs and used only to
+  upload source maps at build time, is FSL-1.1-MIT (the Functional Source
+  License): source-available but not OSI-approved, and the only licence
+  here that restricts what the software may be used for. It is a build-time
+  tool: Next's standalone output (what Dockerfile.frontend actually copies
+  into the runtime image) keeps @sentry/nextjs and drops @sentry/cli, so it
+  does not reach the shipped image the way the LGPL-3.0 libvips payload
+  above does. `npm ci` against this repository does pull it, so a fork that
+  vendors node_modules redistributes it.
+
+--------------------------------------------------------------------------------
+Origin
+--------------------------------------------------------------------------------
+
+KiriChess is an original chess variant invented by Michiel Gekiere in
+February 2026. This repository's first commit was 2026-07-21 under the
+working title "Clockstarved"; the variant was later renamed KiriChess.

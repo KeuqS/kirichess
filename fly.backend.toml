@@ -1,0 +1,107 @@
+app = "kirichess-api"
+primary_region = "ams"
+
+# 10a.3: the shutdown flush needs a budget, and 30 is not a guess - it is the number the process
+# already believes it has. LiveGamePersister.StopAsync flushes every live session on graceful
+# shutdown (6c.1's whole durability guarantee), and it runs under the host's shutdown token, whose
+# timeout is .NET's HostOptions.ShutdownTimeout default of exactly 30 seconds. Fly's own default is
+# 5, so until this line the flush was cut off at 5s by the smaller of two budgets nobody had lined
+# up, and a partial flush reports nothing, because the process is exiting anyway.
+#
+# The arithmetic says 30 is generous, which is the point. 9c.7 batches 64 games per round trip, so
+# 250 live games is 4 round trips (~60 ms at a 15 ms Neon RTT) and even 1600 games is under a
+# second. The headroom is for what the arithmetic does not cover: a cold or suspended Neon compute,
+# where the first round trip is the slow one.
+#
+# STILL UNMEASURED, and the item that owns it says so. The real flush time wants load on the
+# machine, which is 9e.8's ladder; record what it turns out to be in docs/ops/DEPLOYMENT.md § 4.1 beside
+# the capacity derivation. Until then this is an aligned budget, not a verified one.
+kill_timeout = 30
+
+[build]
+  dockerfile = "Dockerfile.backend"
+
+# Schema migration is a deliberate deploy step: this runs to completion in a throwaway machine
+# before the new release rolls, and a non-zero exit aborts the deploy.
+# C-12-4: when ConnectionStrings__Migrator is set, --migrate uses that owner role. The serving
+# process keeps ConnectionStrings__Postgres.
+[deploy]
+  release_command = "dotnet KiriChess.Server.dll --migrate"
+  # With min_machines_running = 1 and a single machine there is no rolling window, and a
+  # bluegreen deploy would need two machines holding divergent in-memory game state.
+  strategy = "immediate"
+
+[env]
+  ASPNETCORE_ENVIRONMENT = "Production"
+  ASPNETCORE_HTTP_PORTS = "8080;9091"
+  RunMigrationsOnStartup = "false"
+  Metrics__Port = "9091"
+  # I-2-2: the public Fly hostname must not serve the API. /health and /metrics stay reachable so
+  # Fly's own checks and Better Stack's origin scrape keep working. Staging must not set this:
+  # kirichess-api-staging.fly.dev is that app's only hostname.
+  OriginLock__BlockedHosts__0 = "kirichess-api.fly.dev"
+  # I-7-7: only this Host serves non-probe traffic. Do NOT also set ASP.NET AllowedHosts. Host
+  # filtering is app-wide, and ASPNETCORE_HTTP_PORTS above puts the public port and the metrics
+  # port on the same Kestrel. Fly scrapes [metrics] port 9091 over the private network, at a
+  # per-machine 6PN address, so that request's Host is neither name below and cannot be enumerated.
+  # An AllowedHosts line would 400 every metrics scrape, and the Better Stack alerting built on
+  # those metrics (I-5-1) would go quiet. OriginHostLock exempts /health and /metrics, so this
+  # list never sees the scrape. AllowedHosts stays "*" in appsettings.json on purpose.
+  OriginLock__AllowedHosts__0 = "api.kirichess.com"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # One machine stays up. A second machine exists and stays stopped until this one
+  # is past soft_limit; Fly then starts it and sends new connections there. The cap is
+  # two machines (`fly scale count 2`). Fly will not create a third. This is only safe
+  # while /health/ready reports redis: "up". Two machines with redis disabled split a
+  # live game across processes that do not share it. See DEPLOYMENT.md § 7.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    # SignalR holds a long-lived WebSocket per player; count connections, not requests.
+    # A player holds two sockets (/hubs/game + /hubs/presence), so one live game is four.
+    #
+    # 2026-10-06, staging shared-cpu-1x: 100 games (~400 sockets) held. 150 games (~600)
+    # stopped answering HTTP. The app's own CPU stayed near 15%; the core was steal.
+    # soft_limit starts the second machine at about 100 games. hard_limit refuses new
+    # connections on this machine at about 150, before that 503. A CPU percent is not
+    # the trigger: steal inflates it while the process is still idle.
+    #
+    # 10a.2: anonymous spectators are capped separately (HubConnectionBudget, 200
+    # anonymous), which leaves 400 sockets - a hundred games - for signed-in players
+    # on each machine. Raising hard_limit does not add that reserve.
+    type = "connections"
+    soft_limit = 400
+    hard_limit = 600
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+# Fly's built-in Prometheus scrapes over the private network. The app binds 9091 in addition to
+# 8080, and only 8080 is published by [http_service], so this port is private and the scraper
+# (which cannot be configured to send a header) reaches it without a token.
+#
+# I-2-10: "private" here is the org's whole private network (kirichess-ui, both staging apps and
+# the log shipper can all reach 9091 over .internal), not "reachable only by Fly's own scraper".
+# Acceptable because everything on that network is ours and 9091 serves operational metrics, not
+# player data - revisit if a non-first-party app is ever deployed into this org.
+#
+# The public port serves /metrics only to a correct `Authorization: Bearer $Metrics__ScrapeToken`.
+# The two gates are alternatives, not a conjunction: until 2026-08-16 the guard 404'd anything whose
+# local port was not 9091 *before* looking at the token, which made the endpoint unreachable to
+# every external scraper regardless of credentials. See MetricsEndpoint.Evaluate.
+[metrics]
+  port = 9091
+  path = "/metrics"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

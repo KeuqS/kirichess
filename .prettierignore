@@ -1,0 +1,15 @@
+# The `format-on-edit` hook (.claude/hooks/format-on-edit.js) runs
+# `npx prettier --write` on every .md an agent touches. Two reasons that must not
+# reach docs/:
+#
+# 1. ROADMAP.md is hand-formatted, with deeply nested italic continuation blocks
+#    prettier reindents wholesale: a one-line status correction produced a
+#    272-line whitespace diff, which collides with anyone editing it concurrently.
+# 2. RULES.md is *generated* from config/kirichess.rules.json by
+#    ui/scripts/gen-rules.mjs, and CI runs `npm run gen:rules:check` (roadmap 8.6).
+#    Reformatting it after generation makes the generated output differ from the
+#    committed file and fails the build.
+docs/
+
+# Vendored, not ours.
+ui/public/stockfish.js

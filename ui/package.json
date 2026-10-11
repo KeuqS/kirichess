@@ -1,0 +1,49 @@
+{
+  "name": "web",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build && node scripts/assert-bundle-budget.mjs",
+    "start": "next start",
+    "lint": "eslint",
+    "gen:rules": "node scripts/gen-rules.mjs",
+    "gen:rules:check": "node scripts/gen-rules.mjs --check",
+    "gen:api": "node scripts/gen-api.mjs",
+    "gen:api:check": "node scripts/gen-api.mjs --check",
+    "gen:locale": "node scripts/gen-locale.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^10.0.11",
+    "@sentry/nextjs": "^10.70.0",
+    "@tabler/icons-react": "^3.46.0",
+    "chess.js": "^1.4.0",
+    "next": "16.3.8",
+    "next-intl": "^4.13.6",
+    "qrcode": "^1.5.4",
+    "react": "19.2.8",
+    "react-chessboard": "^4.7.3",
+    "react-dnd-touch-backend": "^16.0.1",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^26",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.0.5",
+    "@vitest/coverage-v8": "^4.1.11",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.8",
+    "jsdom": "^29.1.1",
+    "openapi-typescript": "^7.13.0",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "vitest": "^4.1.10"
+  }
+}

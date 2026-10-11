@@ -1,0 +1,22 @@
+# Build outputs and dependencies are produced inside the image, never copied in.
+**/node_modules
+**/.next
+**/bin
+**/obj
+**/out
+**/dist
+**/TestResults
+
+# Local state and tooling that has no business in an image layer.
+.git
+.github
+.vs
+.vscode
+.idea
+.claude
+**/.env
+**/.env.*.local
+docs
+*.md
+!ui/README.md
+/e2e

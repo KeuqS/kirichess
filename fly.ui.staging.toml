@@ -1,0 +1,39 @@
+app = "kirichess-ui-staging"
+primary_region = "ams"
+
+# Same as fly.ui.toml: kill_timeout deliberately unset, nothing here holds state to flush (10a.3).
+
+[build]
+  dockerfile = "Dockerfile.frontend"
+  # Mirrors fly.ui.toml's build.args, pointed at the staging backend instead. Next inlines
+  # NEXT_PUBLIC_* at build time, so this has to be a build arg, not a runtime secret.
+  [build.args]
+    NEXT_PUBLIC_API_BASE = "https://kirichess-api-staging.fly.dev"
+    NEXT_PUBLIC_SITE_URL = "https://kirichess-ui-staging.fly.dev"
+    # Intentionally empty: staging errors are noise in the same Sentry project production reports
+    # to. Fill in a separate staging DSN if/when Sentry-in-staging is actually wanted.
+    NEXT_PUBLIC_SENTRY_DSN = ""
+    # Same Cloudflare Turnstile widget as production (DH.3). The site key is public by design
+    # (see fly.ui.toml), so there is no separate staging key to provision.
+    NEXT_PUBLIC_TURNSTILE_SITE_KEY = "0x4AAAAAAEOiGAzrqqug-0n7"
+    # Intentionally empty: staging API does not carry Google OAuth secrets. Production bakes
+    # "true" in fly.ui.toml once Authentication__Google__* is set on kirichess-api (DH.5).
+    NEXT_PUBLIC_GOOGLE_SIGN_IN = ""
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

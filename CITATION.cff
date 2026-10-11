@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+title: KiriChess
+message: If you cite this variant or use this software, please cite it as below.
+type: software
+authors:
+  - family-names: Gekiere
+    given-names: Michiel
+# repository-code: set to the public snapshot URL once AD.13 ships; the working tree stays private.
+url: https://kirichess.com
+license:
+  - Apache-2.0
+  - CC-BY-4.0
+date-released: "2026-07-21"
+abstract: >
+  An original chess variant where the clock is a resource: captures, moves,
+  and checks add or remove time. Invented by Michiel Gekiere in February 2026.
+  First commit 2026-07-21 under the working title Clockstarved; later renamed
+  KiriChess. Licensing is split: the software is Apache-2.0, and the rules
+  manual (docs/RULES.md, config/kirichess.rules.json) is CC BY 4.0. See
+  NOTICE in the repository for the full split, including the vendored
+  GPL-3.0 engine and third-party assets.

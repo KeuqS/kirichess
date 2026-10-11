@@ -1,0 +1,96 @@
+services:
+  db:
+    image: postgres:15
+    container_name: kirichess-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: kirichess
+    ports:
+      - "5432:5432"
+    volumes:
+      - kirichess-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kirichess"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # No persistence: every key this app writes is derived, ephemeral or rebuildable from Postgres
+  # (see Phase 8.4). A flushed Redis costs a re-warm, never a game.
+  redis:
+    image: redis:7-alpine
+    container_name: kirichess-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    image: mcr.microsoft.com/dotnet/sdk:10.0
+    container_name: kirichess-backend
+    working_dir: /app
+    volumes:
+      - .:/app
+      # Keep container bin/obj off the Windows bind mount. Host `dotnet build` otherwise
+      # writes those folders, `dotnet watch` polls them, and Docker Desktop can enumerate
+      # the same file twice - PollingDirectoryWatcher then dies with
+      # "An item with the same key has already been added".
+      - /app/src/KiriChess.Server/bin
+      - /app/src/KiriChess.Server/obj
+      - /app/src/KiriChess.Engine/bin
+      - /app/src/KiriChess.Engine/obj
+    # Compose only interpolates ${VAR} for keys listed under environment: below. Without env_file,
+    # optional .env entries (Moderation__AdminEmails__0, Email__*, Authentication__Google__*, …)
+    # never reach the process. Prod compose already does this; environment: still wins for the
+    # local-dev overrides (Development, SeedDemoData, in-compose Postgres/Redis hosts).
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - ConnectionStrings__Postgres=${ConnectionStrings__Postgres:-Host=db;Port=5432;Database=kirichess;Username=postgres;Password=postgres}
+      - ASPNETCORE_ENVIRONMENT=Development
+      - Jwt__Key=${Jwt__Key:?set Jwt__Key in .env, see .env.example}
+      - Cors__AllowedOrigins__0=${Cors__AllowedOrigins__0:-http://localhost:3000}
+      - DOTNET_USE_POLLING_FILE_WATCHER=1
+      # Off so a restart does not refill the leaderboard. Layout rows come from
+      # NEXT_PUBLIC_LEADERBOARD_SAMPLES in ui/.env.local.
+      - SeedDemoData=false
+      # env_file pulls RunMigrationsOnStartup=false from .env.example copies. Local compose
+      # must migrate on boot or a new column (e.g. AvatarImage) 500s every login.
+      - RunMigrationsOnStartup=true
+      # Enabled by default in dev compose (Phase 8.4), this is the only place multi-instance can
+      # be exercised at all.
+      - Redis__Configuration=${Redis__Configuration:-redis:6379}
+    command: ["dotnet", "watch", "run", "--project", "src/KiriChess.Server/KiriChess.Server.csproj", "--urls", "http://0.0.0.0:8080"]
+    ports:
+      - "5053:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    image: node:20-alpine
+    container_name: kirichess-frontend
+    working_dir: /app/ui
+    volumes:
+      - ./ui:/app/ui
+      - kirichess-node-modules:/app/ui/node_modules
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:5053
+      - WATCHPACK_POLLING=true
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  kirichess-data:
+  kirichess-node-modules:

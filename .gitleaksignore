@@ -1,0 +1,37 @@
+# Accepted gitleaks findings, by fingerprint (commit:file:rule:line).
+#
+# Every entry here is in HISTORY ONLY. The working tree is clean: `git grep` finds no personal
+# mailbox address and no key in any tracked file as of 2026-09-04 (B51 / O-4-4), and
+# TrackedTreeHygieneTests fails the build if one comes back. What cannot be cleaned without a
+# history rewrite is the old commits, and a rewrite has been declined (`.mailmap` records that
+# decision, and the public snapshot at ROADMAP #11a is a fresh export with no history at all, so
+# none of these commits travel to it).
+#
+# Why this file appeared on 2026-09-04 and not earlier: gitleaks-action scans the commit range a
+# push introduces. Pushes to dev had been scanning a handful of commits at a time. The merge that
+# gave dev and main a shared ancestor again brought main's ancestry into that range, so one push
+# scanned 192 commits and surfaced findings that had been sitting in history untouched.
+#
+# Adding a fingerprint here is a decision, not a silencing: each is pinned to one commit, one file
+# and one line, so the same rule tripping anywhere else still fails the build.
+
+# --- Personal mailbox address in audit documents that have since been fixed -------------------
+# B-2.md is the audit packet that REPORTED the address leak, and quoting the address is what kept
+# TrackedTreeHygieneTests red. Fixed in 71beca3 by describing the identities instead. These three
+# fingerprints are that file as it stood before the fix.
+fdf584de63d2c3d22d766c9b3fbbd198dc6ff9f5:docs/audits/B-2.md:kirichess-personal-mailbox:36
+fdf584de63d2c3d22d766c9b3fbbd198dc6ff9f5:docs/audits/B-2.md:kirichess-personal-mailbox:118
+fdf584de63d2c3d22d766c9b3fbbd198dc6ff9f5:docs/audits/B-2.md:kirichess-personal-mailbox:119
+
+# ROADMAP's git-history note, quoting the same address. Fixed in the same commit.
+be11c0b56eafdef96196fd15750ebc110f7cd2f5:docs/ROADMAP.md:kirichess-personal-mailbox:2160
+
+# A scratch QA notes file that no longer exists in the tree at all.
+35cdac26b9dbf189fce8deca4fd8ed0706004458:docs/ops/UI-CHECKLIST-NOTES.txt:kirichess-personal-mailbox:54
+
+# --- False positive: a chess position, not a key ----------------------------------------------
+# C-3.md:67 is a FEN in a worked example about en-passant and threefold repetition:
+# `rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3`. The generic-api-key rule scores it on
+# entropy (4.1) and slash-separated alphanumerics, which is what a FEN looks like. Expect this rule
+# to keep finding FENs; they are the one high-entropy string this repo is full of by nature.
+e6c891f470048f8c97628e3171b79744a6411147:docs/audits/C-3.md:generic-api-key:67

@@ -1,0 +1,38 @@
+Board-move and outcome cues in this directory come from two places.
+
+--------------------------------------------------------------------------------
+Board-move cues - Creative Commons Zero (CC0 1.0)
+--------------------------------------------------------------------------------
+
+These are built from the "Chess Puzzle Blitz SFX" pack by el_boss
+(Jeff Final Boss), recorded on a wooden board and released CC0 1.0. Every
+cue is pitched down to 0.78x and given a -3dB treble shelf, which is what
+makes the set read as a heavy board rather than a light one:
+
+  move.mp3    <- Piece Placement.mp3
+  capture.mp3 <- Piece Capture.mp3
+  castle.mp3  <- Piece Slide.mp3 + Piece Placement.mp3, layered 130ms apart
+                 so the king slides and the rook is set down beside it
+  check.mp3   <- Piece Placement.mp3 with a short ring, so the ring marks a
+                 check rather than a higher pitch
+  start.mp3   <- Board Start.mp3
+
+  https://freesound.org/people/el_boss/packs/30764/
+
+License: Creative Commons Zero, CC0 1.0 Universal
+http://creativecommons.org/publicdomain/zero/1.0/
+
+CC0 waives attribution, so this file is a record of where the audio came
+from rather than a condition of using it.
+
+--------------------------------------------------------------------------------
+Outcome cues - original, Apache License 2.0
+--------------------------------------------------------------------------------
+
+These are synthesized mallet phrases written for KiriChess and are part of
+the Apache-2.0 work. They carry the same pitch-down as the cues above so the
+whole set sits in one register:
+
+  win.mp3     a short rising phrase
+  loss.mp3    a short falling phrase
+  draw.mp3    a single neutral note

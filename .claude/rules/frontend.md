@@ -1,0 +1,91 @@
+# Frontend rules - `ui/`
+
+Applies to all work under `ui/`.
+
+## Next.js version warning
+
+This repo's Next.js is the version installed under `ui/node_modules/next`. APIs and file structure may differ from older Next.js docs. Before changing frontend code, read the guide in `ui/node_modules/next/dist/docs/` and heed deprecation notices.
+
+## Layout
+
+- **App Router:** routes in `ui/app/[locale]/{route}/page.tsx` - every route lives under the
+  `[locale]` segment, and `ui/app/[locale]/layout.tsx` is the root layout
+- **Not locale-scoped, stays at `ui/app/`:** `sitemap.ts`, `robots.ts`, `manifest.ts`,
+  `global-error.tsx`, `globals.css` and the icon files. `opengraph-image.tsx` is **not** in this
+  list: it must sit under `[locale]` or no `og:image` is emitted at all
+- **Shared UI:** `ui/components/`
+- **Hooks / lib:** `ui/lib/`, `ui/hooks/`
+- **API client:** `ui/lib/api.ts` (hand-written wrappers) + `ui/lib/api.generated.ts` (OpenAPI codegen - **do not edit**)
+- **Types:** `ui/lib/types.ts` - aliases of generated schemas only, no hand-written DTO mirrors
+
+## i18n (Phase 9f.4)
+
+Six locales (`en`, `nl`, `es`, `fr`, `de`, `pt-BR`) with `localePrefix: "as-needed"`: English
+keeps its unprefixed paths (`/learn`), every other locale carries its code (`/nl/learn`). Config in `ui/i18n/routing.ts`; the rewrite lives in
+`ui/proxy.ts` (Next 16 renamed `middleware.ts`, and the export moved with it).
+
+- **Navigation must come from `@/i18n/navigation`, not `next/*`.** `Link`, `useRouter`,
+  `usePathname` and `redirect` are locale-aware there; a plain `next/link` href silently drops the
+  prefix and drops a Dutch reader back onto the English page. `useSearchParams`, `useParams` and
+  `notFound` are not locale-aware and keep coming from `next/navigation`.
+- **Never build a path from `window.location.pathname`** and hand it to the locale-aware router: it
+  still carries the prefix, and the router adds another (`/nl/nl/profile`). Use `usePathname`.
+- **Adding a locale** is one entry in `routing.ts` plus `ui/messages/{locale}.json`, and nothing
+  else - `lib/locales.test.ts` fails if the catalogue, the switcher labels or `public/sw.js`'s
+  `LOCALE_PREFIXES` fall out of step, and `i18n/request.ts`'s `Record<AppLocale, typeof en>` fails
+  the build if a locale is listed without a static import. **None of the six has had a native
+  reader go through it**, so none of them meets ROADMAP 9f.4's original bar.
+- **Six locales ship, and four of them have never been read by a native speaker.** `es`, `fr`,
+  `de` and `pt-BR` were added to `routing.ts` on 2026-08-24, which **dropped ROADMAP 9f.4's rule
+  that a locale ships only once a human who plays the variant has read it**. What is proven of all
+  six is structure: identical key sets and identical ICU placeholders, enforced by
+  `lib/locales.test.ts` on every locale in `routing.locales`. What is not proven is meaning. The
+  `rules` namespace is where that bites, since a mistranslated clock rule reads as a broken game
+  rather than as a bad string, so corrections there are worth more than anywhere else in the
+  catalogue.
+- **Drafting a catalogue:** `npm run gen:locale -- <locale>` (add `--dry-run` to see the request
+  without sending it). It reads `ui/i18n/glossary.json`, which holds the vocabulary decisions from
+  the Dutch pass and, since 2026-08-24, from the es/fr/de/pt-BR pass. Argue with that file before
+  the catalogue, since one wrong entry there is wrong in hundreds of strings consistently, which
+  reads as intent rather than as an error. Its `$comment` blocks record the collisions that had to
+  be decided by hand (replay vs. repetition in all four; German `Umwandlung` already meaning
+  promotion, so the conversion bill is `Verwertungsrechnung`; `pool`, which drifted once). The output is
+  a draft, not a locale; adding it to `routing.ts` stays a separate, deliberate act.
+- **When English changes, use `--fill`.** It translates only the keys the locale is missing and
+  leaves reviewed strings alone. The default and `--force` both clobber. This is the mode that
+  matters: `en.json` moves most weeks, and `locales.test.ts` goes red the moment a locale falls
+  behind, so keeping locales in step is the real ongoing cost of owning them.
+- **Strings live in `ui/messages/`.** Deliberately out of the catalogue, each for a stated reason:
+  `docs/legal/*.md` (pinned by `LegalDocumentDriftTests`), moderation and analytics (staff tooling;
+  the player-facing 403 on those routes is in the catalogue as `forbidden`),
+  `lib/rules.generated.ts` (generated data), and server-sent messages, which are
+  hardcoded English in C# and rendered verbatim by `lib/api.ts`. Screen-reader copy lives in the
+  `a11y` and `a11yBoard` namespaces (`lib/a11y.ts` takes a `Translator`, `AccessibleBoard.tsx`
+  calls `useTranslations`); do not add new English literals there.
+
+## API calls
+
+- Use the `api` module in `ui/lib/api.ts`, not raw `fetch`/axios against `/api/*`
+- After backend route changes, run `npm run gen:api:check` (or `gen:api`) in `ui/`
+
+## New pages
+
+- Add `ui/app/{segment}/page.tsx` (or nested segments for dynamic routes)
+- Match an existing page for layout, metadata, and auth patterns (e.g. `ui/app/profile/page.tsx`)
+- Use existing theme/components - read neighbors before inventing new patterns
+
+## Styling
+
+All of it lives in
+[styling.md](styling.md). Read it before styling a page or a component.
+
+The short version: `/`, `/rules`, `/leaderboards` and `/about` are the reference pages. Match what
+they do. Do not invent a fifth page width, a fifth CTA look, or a second card.
+
+## Don't
+
+- Don't import `Link` from `next/link` or `useRouter`/`usePathname` from `next/navigation` inside
+  `app/[locale]` - use `@/i18n/navigation` (see i18n above)
+- Don't edit `ui/lib/api.generated.ts` or generated OpenAPI types
+- Don't hand-write HTTP DTO shapes in `ui/lib/types.ts`
+- Don't add instruction files under `ui/` - keep rules in `.claude/rules/`

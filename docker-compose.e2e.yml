@@ -1,0 +1,67 @@
+# Overlay for the Phase 9b.2 browser E2E. Always layered ON TOP of docker-compose.prod.yml:
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.e2e.yml up -d --build
+#
+# An overlay rather than a fork on purpose: the suite has to exercise the images that actually ship,
+# and a copied compose file drifts silently: the day it drifts is the day the E2E stops testing the
+# thing that deploys. Everything here is either what a real deploy takes from .env (which does not
+# exist in CI) or one of the two settings that make email confirmation load-bearing.
+
+# Anchored because the migrate service runs the same binary and needs the same configuration:
+# StartupValidation.ValidateJwt runs BEFORE the --migrate branch in Program.cs, so a migrate
+# container without a Jwt__Key fails at startup instead of applying the schema.
+x-e2e-env: &e2e-env
+  - ConnectionStrings__Postgres=Host=db;Port=5432;Database=kirichess;Username=postgres;Password=postgres
+  # Deliberately low-entropy and self-describing. .gitleaks.toml (Phase 9a.3) allowlists tests/ by
+  # path and this file is not under tests/, so a random-looking 32-byte string here fails the secret
+  # scan on the very PR that adds it. Identity only needs >= 32 bytes of key material; in a throwaway
+  # stack it does not need to be unguessable.
+  - Jwt__Key=e2e-only-not-a-secret-please-do-not-use-this-key
+  - Cors__AllowedOrigins__0=http://localhost:3000
+  # Every link in every email is built from this (EmailTemplates.Link). On its own it does NOT enable
+  # delivery: EmailOptions.Enabled also requires Email:ApiKey and Email:FromAddress, both unset here,
+  # so LoggingEmailSender stays registered and the confirmation URL goes to stdout instead of Resend.
+  - Frontend__BaseUrl=http://localhost:3000
+  # Without this the confirm-email step is decorative, login never checks it and the spec would
+  # prove nothing. See Phase 9b.2 decision 2.
+  - Auth__RequireConfirmedEmail=true
+  # I-2-6: Cloudflare's published always-pass dummy Turnstile secret key, not a real one - it makes
+  # TurnstileVerifier.IsValidAsync call the real siteverify API instead of short-circuiting on an
+  # empty key, and Cloudflare's siteverify accepts any response value for this key. Pairs with
+  # NEXT_PUBLIC_TURNSTILE_SITE_KEY on the frontend build below. Without this, register through the
+  # UI never renders the widget at all, which is the gap this finding is about: the one flow this
+  # suite exists to prove end to end was the one flow that could not structurally exist in
+  # production. Safe to commit: Cloudflare documents both dummy keys publicly, and they authenticate
+  # against nobody's real site.
+  - Turnstile__SecretKey=1x0000000000000000000000000000000AA
+
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: postgres
+
+  migrate:
+    environment: *e2e-env
+
+  backend:
+    environment: *e2e-env
+
+  frontend:
+    build:
+      args:
+        # Next inlines NEXT_PUBLIC_* at build time, so the origin the BROWSER will use has to be
+        # known here. The browser talks to the published backend port on the host, not to the
+        # compose-internal hostname.
+        NEXT_PUBLIC_API_BASE: http://localhost:8080
+        # I-2-6: Cloudflare's published always-pass, non-interactive dummy sitekey, paired with the
+        # matching dummy Turnstile__SecretKey above. Without this NEXT_PUBLIC_TURNSTILE_SITE_KEY is
+        # empty (docker-compose.prod.yml does not set it either), the widget on /login's register
+        # tab never renders, and the flow this suite drives cannot exist in production - see
+        # docs/ops/PROVIDER-ACCOUNTS.md's 19 Aug entry for what shipping that gap once already cost.
+        # Safe to commit: this key is not tied to any registered site and passes for anyone.
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: "1x00000000000000000000AA"
+    environment:
+      # SSR code (generateMetadata, opengraph-image) runs inside this container, where
+      # localhost:8080 is this container, not backend:8080. Read at runtime, not build time, so it
+      # doesn't need to be (and must not be, being server-only) NEXT_PUBLIC_-prefixed.
+      - API_BASE_INTERNAL=http://backend:8080

@@ -1,0 +1,245 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# One run per commit, not two.
+#
+# `dev` used to be in the push list, and the release PR's head branch IS dev, so every push to it
+# fired both triggers and ran this whole workflow twice on the same SHA. On 2026-09-04 that meant
+# two backend jobs of about 27 minutes each per push, and the release merge sat blocked waiting on
+# the redundant copy of a job that had already passed on that exact commit.
+#
+# The cost of dropping it: a push to dev with no open PR now gets no CI. That is survivable
+# because dev reaches main through a release PR anyway, but it makes opening that PR early a
+# habit worth keeping rather than a formality at the end.
+concurrency:
+  # Keyed on the PR number when there is one, so a force-push or a follow-up commit cancels the
+  # run it supersedes instead of both finishing. Pushing three fixes in a row used to leave three
+  # full suites running against commits nobody was waiting on any more.
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# C-1-10: an explicit floor rather than whatever GITHUB_TOKEN defaults to on this repo. No job here
+# writes anything back to GitHub (uploads use the artifact API, not this token).
+permissions:
+  contents: read
+
+jobs:
+  # C-1-10: this job alone has run about 27 minutes on this repo's real history (see the
+  # de-duplication note above); 40 is a buffer over that, not a guess, so the job fails fast on a
+  # genuine hang instead of the default 6-hour ceiling quietly burning Actions minutes.
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      # Phase 10c.2: pinned to the commit a tag currently resolves to, not the mutable tag itself -
+      # a moved tag is exactly how the trivy-action and kics-github-action supply-chain compromises
+      # happened. Dependabot's github-actions ecosystem entry bumps the SHA (and this comment) the
+      # same way it bumps a semver dependency elsewhere in this file.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore KiriChess.slnx
+
+      # Phase 9a.1: fail the build on a known-vulnerable NuGet package (including transitive
+      # ones) rather than letting `dotnet restore`'s NU1903 warning scroll past unnoticed.
+      - name: Check for vulnerable NuGet packages
+        run: |
+          dotnet list KiriChess.slnx package --vulnerable --include-transitive | tee vulnerable-packages.txt
+          if grep -q "has the following vulnerable packages" vulnerable-packages.txt; then
+            echo "::error::Vulnerable NuGet package(s) found - see above. Bump the package, or if the fix genuinely can't land yet, use NuGetAudit suppressions (see Microsoft docs) with a dated reason."
+            exit 1
+          fi
+
+      - name: Build
+        run: dotnet build KiriChess.slnx --no-restore -c Release
+
+      # GitHub's ubuntu runners have a Docker daemon available to the job by default, so the
+      # Testcontainers-backed persistence tests execute for real instead of skipping. Keep it that
+      # way: if these start silently skipping, the real-database round-trip is no longer covered.
+      - name: Test
+        run: >
+          dotnet test KiriChess.slnx --no-build -c Release
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: backend-test-results
+          path: "**/test-results.trx"
+
+      # Phase 10b.3: reported, not gated - a threshold on a young suite gets satisfied by testing
+      # whatever is easiest, a number printed in the CI log gets read by whoever is deciding what to
+      # test next. coverlet.collector was already a dependency of every test project; this is the
+      # first step that actually invokes it with --collect.
+      - name: Report coverage summary
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool
+          reportgenerator -reports:"**/TestResults/*/coverage.cobertura.xml" -targetdir:coverage-report -reporttypes:TextSummary
+          cat coverage-report/Summary.txt
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Phase 9a.1: fail on a high/critical npm advisory unless docs/../.github/scripts/
+      # npm-audit-gate.mjs explicitly (and with an expiry) waives it. Plain `npm audit` has no
+      # way to accept a single advisory, so bare `npm audit --audit-level=high` would block CI
+      # on the known postcss/sharp pair (fix is a next.js major bump, tracked separately) until
+      # that lands.
+      - name: Check for vulnerable npm packages
+        run: node ../.github/scripts/npm-audit-gate.mjs
+
+      # config/kirichess.rules.json is the single source of truth for every rule variable (Phase
+      # 8.6). The engine embeds it; the UI and docs/RULES.md are generated from it. This fails the
+      # build if either generated copy was not regenerated after a rules change, which is what keeps
+      # backend, frontend and manual from drifting apart.
+      - name: Check generated rules are in sync with the config
+        run: npm run gen:rules:check
+
+      # Phase 9d.7: docs/api/openapi.json is generated from the C# endpoints (the backend job's
+      # OpenApiContractTests is what keeps *it* honest) and ui/lib/api.generated.ts is generated from
+      # it. This fails the build if the client types were not regenerated after a wire-contract
+      # change, the same guard, and the same reason, as the rules check above.
+      - name: Check generated API client is in sync with the document
+        run: npm run gen:api:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      # Phase 9b.1: ui/lib/costPreview.ts and ui/lib/botClock.ts encode variant rules (the
+      # client-side economy mirror and the bot's clock-management difficulty axis) with nothing
+      # else checking them. --coverage (Phase 10b.3) reports a number in the log; it is not a gate -
+      # see vitest.config.mts's own comment on why not.
+      - name: Test
+        run: npm test -- --coverage
+
+      - name: Build
+        run: npm run build
+
+  # Phase 9b.2: the browser E2E. Runs the production compose images (no deployment involved) and
+  # is the first thing in this repo that opens a real browser against a real API and a real Postgres.
+  # It is a normal, blocking job on purpose: "a green E2E run in CI" is 9b's own gate, and a
+  # soft-failing job is one nobody reads.
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install E2E dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      # Overlay, not a fork: this builds Dockerfile.backend and Dockerfile.frontend exactly as a
+      # deploy would, and docker-compose.e2e.yml supplies only what a real deploy takes from .env.
+      - name: Build and start the stack
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.e2e.yml up -d --build
+
+      # Phase 10c.3: the images above are exactly what a deploy ships, and until now nothing looked
+      # at them - 9a.1 gates NuGet, the frontend job's npm-audit-gate.mjs gates npm, both leave the
+      # base image's OS layer unscanned. Resolved by image id (compose's naming is an implementation
+      # detail), scanned before migrations run so a vulnerable image fails fast.
+      - name: Resolve built image ids
+        id: images
+        run: |
+          echo "backend=$(docker compose -f docker-compose.prod.yml -f docker-compose.e2e.yml images -q backend)" >> "$GITHUB_OUTPUT"
+          echo "frontend=$(docker compose -f docker-compose.prod.yml -f docker-compose.e2e.yml images -q frontend)" >> "$GITHUB_OUTPUT"
+
+      # Same waiver-with-an-expiry shape npm-audit-gate.mjs established (Phase 9a.1): a gate with no
+      # waiver path gets deleted the first week it is inconvenient (10c.2). Trivy's own .trivyignore
+      # supports a dated `exp:YYYY-MM-DD` comment per entry, so that file is the waiver list rather
+      # than a second bespoke script. ignore-unfixed: an OS package with no available fix yet cannot
+      # be "fixed" by anyone touching this repo, and would otherwise need a waiver that is re-decided
+      # forever for no reason.
+      #
+      # v0.28.0 still called aquasecurity/setup-trivy@v0.2.1 by tag. Aqua deleted that tag after the
+      # 2026-03-19 compromise (GHSA-69fq-xp46-6x23), so the e2e job died at action download. v0.36.0
+      # SHA-pins setup-trivy v0.2.6 (the restored safe tag).
+      - name: Scan backend image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.images.outputs.backend }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          trivyignores: .trivyignore
+
+      - name: Scan frontend image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.images.outputs.frontend }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          trivyignores: .trivyignore
+
+      # Migration is a deliberate step, never a boot-time race (RunMigrationsOnStartup=false).
+      # --build: the `up --build` above never touches the profile-gated migrate service, so `run`
+      # would reuse a stale cached image (the runner is ephemeral today, but any build-layer cache
+      # added here would otherwise let migrate and backend drift apart).
+      - name: Apply migrations
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.e2e.yml --profile migrate run --rm --build migrate
+
+      - name: Run the E2E suite
+        working-directory: e2e
+        run: npm test
+
+      # Both of these matter on a red run and only on a red run. A failed browser assertion is close
+      # to unreadable without the trace, and a failed assertion caused by the SERVER is unreadable
+      # without the server's log.
+      - name: Dump container logs
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.e2e.yml logs --no-color
+
+      - name: Upload the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: e2e-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.e2e.yml down -v

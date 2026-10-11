@@ -1,0 +1,303 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy (only used for a manual run)"
+        type: choice
+        options:
+          - production
+          - staging
+        default: production
+
+# C-1-10: an explicit floor rather than whatever GITHUB_TOKEN defaults to on this repo. Every job
+# below only reads the checkout; jobs that need more (require-ci-success reads Actions runs) widen
+# their own permissions: block rather than the workflow's.
+permissions:
+  contents: read
+
+jobs:
+  # Refuses to deploy a v* tag (or a manual production dispatch) that isn't reachable from main, so
+  # tagging a commit on dev (or any other branch) can never trigger a production deploy. Staging
+  # deploys straight off main and does not need this gate, that's the point of it.
+  verify-main:
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Phase 10c.2: pinned to the commit each tag/branch currently resolves to, not the mutable
+      # ref itself - a moved tag or branch is exactly how the trivy-action and kics-github-action
+      # supply-chain compromises happened. Dependabot's github-actions ecosystem entry bumps the
+      # SHA (and this comment) the same way it bumps a semver dependency elsewhere in this repo.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      # github.sha/github.ref go through env: rather than being interpolated straight into the
+      # script - untrusted-looking `${{ }}` in a run: block is flagged regardless of whether this
+      # particular pair is attacker-controlled, and the env: indirection costs nothing here.
+      - run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$COMMIT_SHA" origin/main; then
+            echo "::error::$COMMIT_SHA ($COMMIT_REF) is not on main; refusing to deploy."
+            exit 1
+          fi
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          COMMIT_REF: ${{ github.ref }}
+
+  # I-3-1: verify-main only proves the tagged commit is *on* main, not that CI passed on it.
+  # `ci.yml` never runs on a tag push at all (its push filter is `branches: [main]` only), so
+  # without this a `git tag v1.2.3 && git push origin v1.2.3` ships whatever that commit is, red
+  # or unverified, with no other CI signal on the tagged SHA.
+  #
+  # This fails closed and does not re-run anything: it looks for the most recent *completed*
+  # ci.yml run recorded against this exact commit and requires it to have concluded `success`. If
+  # none exists (CI still running, flaked, or was cancelled by a later push's concurrency group -
+  # see ci.yml's cancel-in-progress note) the deploy stops here. The fix in that case is to get
+  # main green on this commit and re-tag, not to spend more Actions minutes re-running CI from
+  # inside the deploy path - this repo has already run out of them once.
+  #
+  # Scoped to the tag/manual-production trigger only, same as verify-main: gating staging the same
+  # way would race ci.yml, since both fire off the identical `push: branches: [main]` event and
+  # would start within seconds of each other, long before a ~27-minute CI run could conclude.
+  require-ci-success:
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: Require a successful CI run on this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          conclusion=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${COMMIT_SHA}&status=completed&per_page=1" --jq '.workflow_runs[0].conclusion // "none"')
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::No successful CI run found for $COMMIT_SHA (latest completed conclusion: $conclusion)."
+            echo "::error::ci.yml does not run on tag pushes, so this checks the run from when the commit landed on main."
+            echo "::error::Get main green on this commit and re-tag - this gate does not re-run CI for you."
+            exit 1
+          fi
+
+  production-backend:
+    needs: [verify-main, require-ci-success]
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      # I-3-4: superfly/flyctl-actions has no tagged releases upstream, so a commit-SHA pin on it
+      # can never be updated by Dependabot (the github-actions updater needs a release or a semver
+      # tag to compute a bump from - this action has neither). The comment that used to sit here
+      # claimed otherwise. Installing flyctl directly removes a third-party action from the
+      # credentialed deploy path entirely, which is a strictly smaller footprint than
+      # keeping a pin nothing can ever move.
+      # I-3-3: FLY_API_TOKEN_API is an environment secret. This job's environment: production
+      # selects the token that can deploy only kirichess-api. The staging job below reads the
+      # same secret name and gets the kirichess-api-staging token instead.
+      - name: Install flyctl
+        run: |
+          curl -L https://fly.io/install.sh | sh
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+      # I-3-2: the image that reaches production is built fresh by Fly's remote builder at deploy
+      # time; the only Trivy scan in this repo (ci.yml's e2e job) runs against a separate,
+      # locally-compose-built image at an earlier moment. Build and push the release image here,
+      # scan that exact artifact, then ship it by reference so the second flyctl invocation cannot
+      # rebuild (and silently diverge from) what was just scanned.
+      - name: Build and push the release image
+        id: build
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_API }}
+        run: |
+          set -euo pipefail
+          IMAGE="registry.fly.io/kirichess-api:deploy-${GITHUB_SHA}"
+          flyctl deploy --config fly.backend.toml --build-only --push --remote-only --ha=false --image-label "deploy-${GITHUB_SHA}"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+      # Trivy pulls the image straight from Fly's registry, so it needs the same credential
+      # `flyctl deploy` used to push it - `flyctl auth docker` writes that into the docker config
+      # Trivy's registry client reads by default.
+      - name: Authenticate docker to Fly's registry
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_API }}
+        run: flyctl auth docker
+      # Same severity/ignore-unfixed/trivyignores settings as ci.yml's e2e scan, so a waiver
+      # decided there also covers the artifact that actually ships.
+      - name: Scan the release image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.build.outputs.image }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          trivyignores: .trivyignore
+      # release_command in fly.backend.toml runs the migration before the new release rolls;
+      # a failed migration aborts the deploy. --image ships exactly the artifact just scanned,
+      # rather than letting this second flyctl deploy rebuild it.
+      # --ha=false is load-bearing while Redis is off; a default HA pair splits a live game
+      # across two in-process registries with no error.
+      - run: flyctl deploy --config fly.backend.toml --remote-only --ha=false --image "${{ steps.build.outputs.image }}"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_API }}
+      # I-5-3: fly.backend.toml's strategy = "immediate" plus a Fly health check that only hits
+      # /health (liveness, deliberately touches nothing else - HealthEndpoints.cs) means a release
+      # that boots but cannot reach Neon, or that reintroduces the /metrics 404 DEPLOYMENT.md
+      # §10.1 documents as a worked example, takes traffic the instant the machine starts. The
+      # external /health/ready monitor and the synthetic each poll on their own schedule (minutes),
+      # which is a real gap between "traffic starts" and "something would notice". This is the same
+      # three-line check DEPLOYMENT.md §10.1 already tells a human to run by hand after a deploy,
+      # run here instead so a broken release fails this job before production-ui ever starts,
+      # rather than quietly taking traffic first.
+      #
+      # METRICS_SCRAPE_TOKEN must be the same value as the app's Metrics__ScrapeToken Fly secret
+      # (fly secrets set --app kirichess-api Metrics__ScrapeToken=...), added as a repository or
+      # production-environment GitHub Actions secret the same way the per-app deploy tokens are.
+      # The repository secret was set 2026-10-04 (I-5-3). Absent, this step warns and skips the
+      # authenticated scrape rather than failing the job: the release is already live by then.
+      - name: Smoke-test the release before the UI deploys against it
+        env:
+          METRICS_SCRAPE_TOKEN: ${{ secrets.METRICS_SCRAPE_TOKEN }}
+        run: |
+          set -euo pipefail
+          BASE="https://kirichess-api.fly.dev"
+
+          ready_code=$(curl -sS -o /tmp/ready.json -w '%{http_code}' "$BASE/health/ready")
+          if [ "$ready_code" != "200" ] || ! grep -q '"status":"ready"' /tmp/ready.json; then
+            echo "::error::$BASE/health/ready returned $ready_code, expected 200 with status \"ready\": $(cat /tmp/ready.json)"
+            exit 1
+          fi
+
+          # The authenticated check is the one assertion here that needs a secret, and it is
+          # deliberately skipped-with-a-warning rather than failed when that secret is absent.
+          # This step runs AFTER flyctl deploy, and production-ui has `needs: production-backend`,
+          # so failing here does not prevent a bad release: it leaves the backend deployed and the
+          # UI not, which is exactly the split-release state I-3-6 added production-release-complete
+          # to catch. Turning a missing repository secret into that state on every production deploy
+          # would be a worse bug than the gap it closes. The two assertions below and above need no
+          # credential and stay fail-closed, so the smoke test is never silently a no-op.
+          if [ -n "${METRICS_SCRAPE_TOKEN:-}" ]; then
+            metrics_code=$(curl -sS -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $METRICS_SCRAPE_TOKEN" "$BASE/metrics")
+            if [ "$metrics_code" != "200" ]; then
+              echo "::error::$BASE/metrics with the scrape token returned $metrics_code, expected 200."
+              exit 1
+            fi
+          else
+            echo "::warning::METRICS_SCRAPE_TOKEN is not set on this repository, so the authenticated /metrics check was skipped. Add it as a GitHub secret matching the app's Metrics__ScrapeToken Fly secret to complete this smoke test."
+          fi
+
+          metrics_anon_code=$(curl -sS -o /dev/null -w '%{http_code}' "$BASE/metrics")
+          if [ "$metrics_anon_code" != "401" ]; then
+            echo "::error::$BASE/metrics with no token returned $metrics_anon_code, expected 401."
+            exit 1
+          fi
+
+  production-ui:
+    needs: production-backend
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install flyctl
+        run: |
+          curl -L https://fly.io/install.sh | sh
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+      - name: Build and push the release image
+        id: build
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_UI }}
+        run: |
+          set -euo pipefail
+          IMAGE="registry.fly.io/kirichess-ui:deploy-${GITHUB_SHA}"
+          flyctl deploy --config fly.ui.toml --build-only --push --remote-only --image-label "deploy-${GITHUB_SHA}"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
+      - name: Authenticate docker to Fly's registry
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_UI }}
+        run: flyctl auth docker
+      - name: Scan the release image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.build.outputs.image }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+          trivyignores: .trivyignore
+      - run: flyctl deploy --config fly.ui.toml --remote-only --image "${{ steps.build.outputs.image }}"
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_UI }}
+
+  # I-3-6: if production-ui fails, or the run is cancelled between the two jobs, production is left
+  # with a new backend behind an old UI (or vice versa) with nothing beyond GitHub's own red-run
+  # indicator saying so. This job adds no new risk - it only reads the two jobs' own results - and
+  # turns that into an explicit, named assertion with a remediation in the error message, rather
+  # than relying on someone noticing the run icon.
+  production-release-complete:
+    needs: [production-backend, production-ui]
+    if: always() && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm both halves of the release landed
+        run: |
+          if [ "${{ needs.production-backend.result }}" != "success" ] || [ "${{ needs.production-ui.result }}" != "success" ]; then
+            echo "::error::Production deploy is half-applied for ${{ github.ref_name }}: backend=${{ needs.production-backend.result }}, ui=${{ needs.production-ui.result }}."
+            echo "::error::Re-run this workflow to completion - never leave backend and UI on different releases."
+            exit 1
+          fi
+          echo "Backend and UI both deployed successfully for ${{ github.ref_name }}."
+
+  # Deploys on every push to main (continuous staging) plus on-demand via workflow_dispatch. This is
+  # meant to be the environment that takes the first mistake, so it stays cheap to trigger.
+  staging-backend:
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install flyctl
+        run: |
+          curl -L https://fly.io/install.sh | sh
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+      # --ha=false is load-bearing while Redis is off; a default HA pair splits a live game
+      # across two in-process registries with no error.
+      - run: flyctl deploy --config fly.backend.staging.toml --remote-only --ha=false
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_API }}
+
+  staging-ui:
+    needs: staging-backend
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 15
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install flyctl
+        run: |
+          curl -L https://fly.io/install.sh | sh
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+      - run: flyctl deploy --config fly.ui.staging.toml --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_UI }}

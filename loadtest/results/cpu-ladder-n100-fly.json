@@ -1,0 +1,17 @@
+{
+  "Label": "cpu-ladder-n100",
+  "App": "kirichess-api-staging",
+  "Instance": "867002b7e9e978",
+  "Vm": "shared-cpu-1x / 512MB",
+  "Region": "ams",
+  "WindowOpenedAtUtc": "2026-10-06T16:01:15.5794071+00:00",
+  "WindowClosedAtUtc": "2026-10-06T16:04:23.2619537+00:00",
+  "SampleSpanSeconds": 171.2,
+  "IntervalSeconds": 15,
+  "Intervals": 12,
+  "BusyPercent": { "Window": 52.3, "Min": 13.4, "Mean": 47.6, "Max": 85.0 },
+  "StealPercent": { "Window": 42.7, "Min": 0.2, "Mean": 37.2, "Max": 78.2 },
+  "GuestPercent": { "Window": 9.5, "Min": 6.4, "Mean": 10.4, "Max": 16.9 },
+  "MemoryMiB": { "Total": 458.9, "AvailableAtWindowStart": 218.1, "AvailableAtWindowEnd": 215.6 },
+  "Notes": "Busy is 100 * (1 - idle / total) across fly_instance_cpu modes. Guest is user + system + softirq + irq + nice + guest, excluding steal and iowait. Window is the counter delta over the span. Min/mean/max are the 15s intervals inside it. Staging, one machine. Not the 2026-09-27 production rung."
+}

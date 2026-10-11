@@ -1,0 +1,77 @@
+name: Restore drill
+
+# ROADMAP 9e.8's automation half: "put the restore-and-boot drill on a monthly schedule, because a
+# backup nobody has restored from *since the schema last changed* is a hypothesis again."
+#
+# Everything this does is in scripts/restore-drill.sh, deliberately: the same file is how 9c.4's
+# manual first run is performed, so the scheduled drill and the by-hand drill can never drift into
+# testing two different things.
+#
+# This touches production only by *reading* it: it branches the Neon project at a past timestamp and
+# works exclusively against the throwaway branch, which it deletes on the way out. Nothing here
+# deploys, and nothing here writes to the production branch.
+
+on:
+  schedule:
+    # 04:17 UTC on the 1st of each month. Off the hour on purpose: scheduled runs at :00 queue behind
+    # everyone else's cron on GitHub's shared runners and can be delayed by tens of minutes.
+    - cron: "17 4 1 * *"
+  workflow_dispatch:
+    inputs:
+      restore_point:
+        description: "ISO-8601 UTC timestamp to restore to (default: 1 hour ago)"
+        type: string
+        required: false
+      keep_branch:
+        description: "Keep the drill branch afterwards for inspection"
+        type: boolean
+        default: false
+
+# Serialize with offsite-backup.yml (10c.1): both create a compute endpoint on the same Neon
+# project, and a failed cleanup on either leaks one.
+concurrency:
+  group: neon-branch-jobs
+  cancel-in-progress: false
+
+# C-1-10: an explicit floor rather than whatever GITHUB_TOKEN defaults to on this repo, matching
+# the pattern offsite-backup.yml and ops-probes.yml already use.
+permissions:
+  contents: read
+
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Phase 10c.2: pinned to the commit each tag currently resolves to, not the mutable tag
+      # itself - see ci.yml's matching comment for why. Dependabot's github-actions ecosystem
+      # entry bumps the SHA (and this comment) the same way it bumps a semver dependency.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Run the restore drill
+        # `bash <path>`, not `./<path>`: this repo is authored on Windows and the executable bit is
+        # not reliably preserved in the index, which would fail here as a bare "Permission denied".
+        run: bash scripts/restore-drill.sh
+        env:
+          # A Neon *management* API key (branch create/delete). Not a database password, and not the
+          # same secret as ConnectionStrings__Postgres: the drill reads the branch's own credentials
+          # from the Neon API at runtime and never needs production's.
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID || 'plain-salad-47730828' }}
+          RESTORE_POINT: ${{ inputs.restore_point }}
+          KEEP_BRANCH: ${{ inputs.keep_branch }}
+
+      # A failing drill has to be noticed. GitHub e-mails the repo owner when a *scheduled* workflow
+      # fails, which is the only notification path that needs no extra account, so this job stays
+      # plain and lets that fire. Once 9c.5's Better Stack account is fully live, a heartbeat check
+      # here would be the upgrade: silence from a monthly cron is otherwise indistinguishable from a
+      # disabled workflow, and GitHub disables schedules on repos with 60 days of no activity.
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::Restore drill failed. Production is unaffected: this job only reads it."
+          echo "See docs/ops/DEPLOYMENT.md § 5.2 for what each assertion means and what a failure implies."

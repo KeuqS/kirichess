@@ -1,0 +1,64 @@
+app = "kirichess-api-staging"
+primary_region = "ams"
+
+# Same 30 seconds as production (fly.backend.toml, 10a.3), for the same reason staging shares the
+# release_command below: the value being exercised has to be the value that ships. The derivation
+# lives in the production file rather than being copied here.
+kill_timeout = 30
+
+[build]
+  dockerfile = "Dockerfile.backend"
+
+# Same migration-before-roll gate as production (fly.backend.toml), on purpose: staging exists to
+# take the first hit if a migration is wrong, so it must run the exact same release_command.
+# C-12-4: when ConnectionStrings__Migrator is set, --migrate uses that owner role.
+[deploy]
+  release_command = "dotnet KiriChess.Server.dll --migrate"
+  strategy = "immediate"
+
+[env]
+  ASPNETCORE_ENVIRONMENT = "Staging"
+  ASPNETCORE_HTTP_PORTS = "8080;9091"
+  RunMigrationsOnStartup = "false"
+  Metrics__Port = "9091"
+  # I-7-7: staging's only public name is the Fly hostname, so it is allowed rather than blocked.
+  # Same reason as fly.backend.toml for leaving ASP.NET AllowedHosts unset: the 6PN metrics scrape
+  # is not a name that can be listed, and OriginHostLock exempts /health and /metrics.
+  OriginLock__AllowedHosts__0 = "kirichess-api-staging.fly.dev"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # Deliberate divergence from fly.backend.toml: production pins min_machines_running = 1 because a
+  # restart mid-game strands live in-memory state (see the comment there). Staging carries no real
+  # players, so scaling to zero between test sessions is the cheaper and still-correct choice; if a
+  # test needs an always-on machine (e.g. exercising the SignalR backplane across a scale-up), flip
+  # this back for that session and revert after.
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    # Same numbers as fly.backend.toml. Staging may run one machine; the limits are
+    # what a second machine, once Redis is up, uses to decide when to start.
+    soft_limit = 400
+    hard_limit = 600
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+# Private port for Fly's built-in Prometheus (it cannot send a bearer token); the public port
+# serves /metrics only against Metrics__ScrapeToken. Alternatives, not a conjunction: see the same
+# block in fly.backend.toml and MetricsEndpoint.Evaluate.
+[[metrics]]
+  port = 9091
+  path = "/metrics"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

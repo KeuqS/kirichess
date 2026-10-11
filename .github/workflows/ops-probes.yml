@@ -1,0 +1,70 @@
+name: Ops probes (10c.5)
+
+# ROADMAP 10c.5: the three signals 9c.5's app-side alerting does not have. Two of them run here
+# (synthetic play, Neon storage/compute); the third is a Better Stack monitor on the Cloudflare
+# hostnames, provisioned by infra/betterstack/, not by this workflow.
+#
+# Everything this does is in scripts/synthetic-play.sh and scripts/neon-watch.sh, so a laptop run
+# and the scheduled run cannot drift into testing two different things.
+#
+# This hits production. It does not deploy, and the Neon job only reads the management API.
+
+on:
+  schedule:
+    # Every 15 minutes, 3 minutes past the quarter-hour. Off the hour on purpose: scheduled runs at
+    # :00 queue behind everyone else's cron on GitHub's shared runners. Matches the 900s heartbeat
+    # period in infra/betterstack/main.tf; grace of another 900s is the slip.
+    - cron: "3,18,33,48 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: ops-probes
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  synthetic-play:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Phase 10c.2: pinned to the commit each tag currently resolves to, not the mutable tag
+      # itself - see ci.yml's matching comment for why. Dependabot's github-actions ecosystem
+      # entry bumps the SHA (and this comment) the same way it bumps a semver dependency.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Play one move against production
+        # `bash <path>`, not `./<path>`: this repo is authored on Windows and the executable bit is
+        # not reliably preserved in the index, which would fail here as a bare "Permission denied".
+        run: bash scripts/synthetic-play.sh
+        env:
+          SYNTHETIC_API_TOKEN: ${{ secrets.SYNTHETIC_API_TOKEN }}
+          SYNTHETIC_HEARTBEAT_URL: ${{ secrets.SYNTHETIC_HEARTBEAT_URL }}
+          REQUIRE_HEARTBEAT: "1"
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::Synthetic play failed. A game could not be created, a move did not land, or the clock did not move."
+          echo "See docs/ops/DEPLOYMENT.md § 10.2 for the throwaway account, the play token, and the heartbeat URL."
+
+  neon-watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Watch Neon storage and compute
+        run: bash scripts/neon-watch.sh
+        env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID || 'plain-salad-47730828' }}
+          NEON_WATCH_HEARTBEAT_URL: ${{ secrets.NEON_WATCH_HEARTBEAT_URL }}
+          REQUIRE_HEARTBEAT: "1"
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::Neon watch failed. Storage is near the plan limit, a compute endpoint is disabled, or the management API refused the call."
+          echo "See docs/ops/DEPLOYMENT.md § 10.2. Production is unaffected: this job only reads Neon."

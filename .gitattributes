@@ -1,0 +1,9 @@
+# Shell scripts must be LF in the index no matter who commits them. scripts/restore-drill.sh runs on
+# ubuntu-latest in the restore-drill workflow, and a CRLF checkout there fails on the shebang with a
+# "bad interpreter: /usr/bin/env bash^M" that reads like a missing interpreter rather than a line
+# ending. This repo is authored on Windows with core.autocrlf=true, which stores LF correctly today;
+# this makes that a property of the repository rather than of one machine's git config.
+*.sh text eol=lf
+
+# Belt-and-suspenders with .gitignore: never include a local identity map in git archive.
+.mailmap export-ignore
