@@ -9,6 +9,7 @@ docs/
 ├── ROADMAP.md             work queue (launch, phases, standing positions)
 ├── RULES.md               generated rules manual (CC BY 4.0) - do not move
 ├── game/                  the variant itself
+│   ├── FAQ.md             current answers to early player questions
 │   ├── PGN.md             export contract
 │   └── CLAIMS.md          invention, attribution, trademark
 ├── ops/                   running kirichess.com
@@ -50,6 +51,7 @@ docs/
 |---|---|
 | What to build next | [ROADMAP.md](ROADMAP.md) |
 | How the variant works | [RULES.md](RULES.md) (or [kirichess.com/rules](https://kirichess.com/rules)) |
+| Answers to early player questions | [game/FAQ.md](game/FAQ.md) |
 | How to run or deploy | [ops/DEPLOYMENT.md](ops/DEPLOYMENT.md) |
 | What to do before / on / right after launch | [ops/LAUNCH.md](ops/LAUNCH.md) |
 | What to do when an alert fires | [ops/INCIDENTS.md](ops/INCIDENTS.md) |
